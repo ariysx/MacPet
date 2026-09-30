@@ -10,7 +10,7 @@ extension Traits {
 }
 
 extension Looks {
-    static let plain = Looks(shape: .blob, primary: 0xF2A65A, secondary: 0xFCE3B0,
+    static let plain = Looks(shape: .blob, colourway: PetPalette.colourways[0],
                              pattern: .plain, accessory: .none, eyes: .dot)
 }
 

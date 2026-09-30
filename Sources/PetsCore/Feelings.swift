@@ -9,7 +9,7 @@ enum Feeling: String, Codable, CaseIterable {
 enum Feelings {
     /// Worked out from state every tick. The first rule that matches wins.
     static func resolve(_ pet: Pet) -> Feeling {
-        if (pet.held && pet.traits.courage == .timid) || pet.fight == .fleeing || pet.fight == .retreated {
+        if (pet.held && pet.courage == .timid) || pet.fight == .fleeing || pet.fight == .retreated {
             return .scared
         }
         if pet.sickRemaining > 0 || pet.health < 30 { return .sick }

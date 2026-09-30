@@ -68,6 +68,9 @@ struct Pet: Codable, Identifiable {
     var energy: Double = 100
     var health: Double = 100
     var wins = 0
+    var weapon: Item?
+    var relic: Item?
+    var buffs: [Buff] = []
     /// Time spent with hunger, happiness and energy all above 70. Lays an egg at 6 h.
     var contentTime: Double = 0
 
@@ -124,9 +127,23 @@ struct Pet: Codable, Identifiable {
     var isFalling: Bool { !held && height > 0 }
     var isEating: Bool { eatingRemaining > 0 }
 
+    func hasBuff(_ kind: BuffKind) -> Bool { buffs.contains { $0.kind == kind } }
+
+    mutating func addBuff(_ kind: BuffKind, seconds: Double) {
+        buffs.removeAll { $0.kind == kind }
+        buffs.append(Buff(kind: kind, remaining: seconds))
+    }
+
+    /// Timid pets act Brave under a Courage Potion.
+    var courage: Courage { hasBuff(.courage) ? .brave : traits.courage }
+
+    /// Seconds between hits in a fight, after trait and weapon.
+    var attackInterval: Double { traits.attackInterval * (weapon?.attackIntervalMultiplier ?? 1) }
+
     /// Grid pixels per second.
     var walkSpeed: Double {
         var speed = 10 * traits.walkSpeedMultiplier
+        if relic == .featherCharm { speed *= 1.25 }
         if stage == .elder { speed *= 0.6 }
         if feeling == .sad { speed *= 0.7 }
         return speed
@@ -145,15 +162,18 @@ struct Pet: Codable, Identifiable {
                               petsWithin60: Int, petsWithin30: Int) -> DeathCause? {
         let hours = dt / 3600
         age += dt
+        for b in buffs.indices { buffs[b].remaining -= dt }
+        buffs.removeAll { $0.remaining <= 0 }
+        let sleepGain = 20 * hours * (relic == .moonPillow ? 1.5 : 1)
 
         // Sleep and energy
         if held || fight != .none { sleep = .awake }
         switch sleep {
         case .night:
-            energy += 20 * hours
+            energy += sleepGain
             if !night { sleep = .awake }
         case .nap:
-            energy += 20 * hours
+            energy += sleepGain
             if energy >= Self.maxNeed { sleep = .awake }
         case .awake:
             energy -= 6 * hours * traits.energyDecayMultiplier
@@ -167,11 +187,11 @@ struct Pet: Codable, Identifiable {
         }
 
         // Hunger
-        hunger -= 8.5 * hours * traits.hungerDecayMultiplier
+        hunger -= 8.5 * hours * traits.hungerDecayMultiplier * (relic == .snackPouch ? 0.75 : 1)
 
         // Happiness
         let lonely = clock - lastPettedAt >= 6 * 3600
-        happiness -= (lonely ? 8 : 4) * hours * traits.happinessDecayMultiplier
+        happiness -= (lonely ? 8 : 4) * hours * traits.happinessDecayMultiplier * (relic == .cozyScarf ? 0.75 : 1)
         switch traits.sociality {
         case .social: happiness += Double(petsWithin60) * hours
         case .loner: happiness -= Double(petsWithin30) * hours
@@ -180,7 +200,7 @@ struct Pet: Codable, Identifiable {
             heldAccumulator += dt
             while heldAccumulator >= 10 {
                 heldAccumulator -= 10
-                happiness += traits.heldHappinessPer10s
+                happiness += courage == .brave ? 2 : -3
             }
         } else {
             heldAccumulator = 0
@@ -205,7 +225,7 @@ struct Pet: Codable, Identifiable {
         if drains > 0 {
             health -= 1.4 * Double(drains) * hours
         } else if hunger > 40 && happiness > 40 {
-            health += 3 * hours
+            health += 3 * hours * (relic == .heartLocket ? 2 : 1)
         }
         clampNeeds()
 
@@ -257,6 +277,8 @@ struct Egg: Codable, Identifiable {
     var elapsed: Double = 0
     /// Seconds taken off by petting, at most 5 min.
     var pettingBonus: Double = 0
+    /// Touched by a Mutagen: drawn with a shimmer.
+    var mutated = false
 
     var progress: Double { min(1, (elapsed + pettingBonus) / duration) }
     var remaining: Double { max(0, duration - elapsed - pettingBonus) }

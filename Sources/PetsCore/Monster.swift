@@ -66,8 +66,9 @@ enum Combat {
 
     /// Damage of one pet hit, before the thrown-in double.
     static func attackDamage(for pet: Pet, alliesInFight: Int) -> Double {
-        var damage = 4 + 4 * (pet.hunger / 100) + min(Double(pet.wins) * 0.5, 6)
+        var damage = 4 + 4 * (pet.hunger / 100) + min(Double(pet.wins) * 0.5, 6) + (pet.weapon?.attackBonus ?? 0)
         if pet.stage == .baby { damage *= 0.5 }
+        if pet.hasBuff(.strength) { damage *= 1.5 }
         if pet.traits.sociality == .social && alliesInFight > 0 { damage *= Traits.socialAttackMultiplier }
         return damage
     }
@@ -153,12 +154,14 @@ extension World {
             m.sinceLastHit = 0
             pets[i].landedHit = true
             pets[i].lastAttackAt = clock
-            pets[i].attackCooldown = pets[i].traits.attackInterval
+            pets[i].attackCooldown = pets[i].attackInterval
         }
 
         if m.health <= 0 {
             smoke = SmokePuff(x: m.x, y: 0)
-            for i in pets.indices where pets[i].landedHit {
+            let winners = pets.indices.filter { pets[$0].landedHit }
+            if !winners.isEmpty { dropMonsterLoot(m.kind, at: m.x, winners: winners) }
+            for i in winners {
                 pets[i].happiness = min(100, pets[i].happiness + 25)
                 pets[i].excitedRemaining = 20
                 pets[i].wins += 1
@@ -178,13 +181,12 @@ extension World {
                 m.x += (dx < 0 ? -1 : 1) * min(abs(dx) - m.kind.reach + 0.5, m.kind.speed * dt)
             } else if m.hitCooldown <= 0 {
                 m.hitCooldown = m.kind.hitInterval
-                pets[target].health -= m.kind.damage
+                pets[target].health -= m.kind.damage * (pets[target].relic == .guardianShell ? 0.6 : 1)
                 pets[target].hurtFlash = 0.3
                 if pets[target].health <= 0 {
                     pets[target].health = 0
                     monster = m
-                    kill(petIndex: target, cause: .monster)
-                    return
+                    if kill(petIndex: target, cause: .monster) { return }
                 }
             }
         } else {
@@ -206,7 +208,7 @@ extension World {
         case .none, .charging, .fleeing:
             if pets[i].health < Combat.retreatHealth {
                 pets[i].fight = .retreated
-            } else if pets[i].traits.courage == .brave {
+            } else if pets[i].courage == .brave {
                 pets[i].fight = distance <= m.kind.reach ? .fighting : .charging
             } else {
                 let cornered = abs(pets[i].x - fleeEdge(from: m.x, petX: pets[i].x)) < 10

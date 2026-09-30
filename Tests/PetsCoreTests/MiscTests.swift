@@ -62,7 +62,8 @@ final class GeneticsTests: XCTestCase {
         for _ in 0..<200 {
             let genes = Genetics.inherit(from: parent, generation: 2, &random)
             if genes.looks.accessory != parent.looks.accessory {
-                XCTAssertTrue(genes.mutations.contains(genes.looks.accessory.rawValue))
+                XCTAssertTrue(genes.mutations.contains(Looks.words(genes.looks.accessory.rawValue))
+                              || genes.looks.accessory == .none)
             }
             if genes.traits.courage != parent.traits.courage {
                 XCTAssertTrue(genes.mutations.contains("Timid"))

@@ -8,6 +8,9 @@ enum WorldEvent: Equatable {
     case monsterDefeated(MonsterKind)
     case monsterAte(MonsterKind)
     case needsCare(name: String, reason: CareReason)
+    case revived(name: String)
+    case dailyChestArrived
+    case lootCollected([Item], fromChest: Bool)
 }
 
 /// All pet state and rules. No AppKit or Metal. Positions are in grid pixels; only x
@@ -35,6 +38,10 @@ struct World: Codable {
     var random: SeededRandom
     var monsterSpawnTimer: Double = 0
     var rainTimer: Double = 0
+    var inventory: [Item: Int] = [:]
+    /// Loot bags and the daily chest lying on the ground.
+    var loot: [Loot] = []
+    var lastDailyChestDay = ""
 
     // MARK: Not saved
 
@@ -54,6 +61,7 @@ struct World: Codable {
 
     enum CodingKeys: String, CodingKey {
         case clock, pets, eggs, graves, graveyard, hatchedCount, random, monsterSpawnTimer, rainTimer
+        case inventory, loot, lastDailyChestDay
     }
 
     init(seed: UInt64) {
@@ -101,6 +109,7 @@ struct World: Codable {
         updatePellets(dt: dt)
         updateMonster(dt: dt, night: night)
         updateSmoke(dt: dt)
+        updateLoot(dt: dt)
         updateRain(dt: dt)
         separatePets()
         ensureNotEmpty()
@@ -161,14 +170,29 @@ struct World: Codable {
         }
     }
 
-    mutating func kill(petIndex i: Int, cause: DeathCause) {
+    /// Returns false if a Phoenix Feather brought the pet back.
+    @discardableResult
+    mutating func kill(petIndex i: Int, cause: DeathCause) -> Bool {
+        if pets[i].relic == .phoenixFeather {
+            pets[i].relic = nil
+            pets[i].health = 50
+            pets[i].sickRemaining = 0
+            pets[i].hunger = max(pets[i].hunger, 50)
+            pets[i].happiness = max(pets[i].happiness, 50)
+            pets[i].excitedRemaining = 20
+            events.append(.revived(name: pets[i].name))
+            return false
+        }
         let pet = pets.remove(at: i)
+        // Equipment goes back in the bag for the rest of the family.
+        addToInventory([pet.weapon, pet.relic].compactMap { $0 })
         for p in pellets.indices where pellets[p].claimedBy == pet.id { pellets[p].claimedBy = nil }
         graves.append(Grave(id: UUID(), x: pet.x, name: pet.name, remaining: World.graveDuration))
         graveyard.insert(GraveyardEntry(name: pet.name, generation: pet.generation, traits: pet.traits,
                                         looks: pet.looks, age: pet.age, cause: cause, date: now()),
                          at: 0)
         events.append(.died(name: pet.name, cause: cause))
+        return true
     }
 
     // MARK: Pets
@@ -185,8 +209,7 @@ struct World: Codable {
             let calmForPet = calm && pets[i].foodTarget == nil
             if let cause = pets[i].updateNeeds(dt: dt, clock: clock, night: night, calm: calmForPet,
                                                petsWithin60: near60, petsWithin30: near30) {
-                kill(petIndex: i, cause: cause)
-                continue
+                if kill(petIndex: i, cause: cause) { continue }
             }
 
             // Old age: each hour as an elder, a 2% chance of dying peacefully.
@@ -195,8 +218,7 @@ struct World: Codable {
                 if pets[i].elderRollTimer >= 3600 {
                     pets[i].elderRollTimer -= 3600
                     if random.chance(0.02) {
-                        kill(petIndex: i, cause: .oldAge)
-                        continue
+                        if kill(petIndex: i, cause: .oldAge) { continue }
                     }
                 }
             }
