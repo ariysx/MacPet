@@ -222,7 +222,9 @@ final class PetsView: MTKView {
                                      background: app.backgroundInfo,
                                      flash: app.lightningFlash.flash,
                                      shake: app.shakeOffset,
-                                     bolt: app.lightningFlash.bolt)
+                                     bolt: app.lightningFlash.bolt,
+                                     wet: Float(app.world.wetness),
+                                     season: Float(app.season.rawValue))
         var ui = PetsRenderer.UIUniforms()
         if isMain && app.playMode {
             let playUI = app.playUI
@@ -302,7 +304,13 @@ final class PetsView: MTKView {
             return
         }
         if feedKeyDown {
-            app.world.dropPellet(x: worldX(p))
+            let x = worldX(p)
+            let at = SIMD2(p.x, p.y + 40)
+            if !app.world.dropPellet(x: x) {
+                app.playUI.toast("enough food out already", ink: PlayUI.grey, atGrid: at)
+            } else if let why = app.world.whyNobodyEats(at: x) {
+                app.playUI.toast(why, ink: PlayUI.grey, atGrid: at)
+            }
             return
         }
         guard let hit = lastFrame.hits.first(where: { $0.contains(p) }) else { return }

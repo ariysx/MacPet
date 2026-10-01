@@ -226,3 +226,57 @@ final class WeatherTests: XCTestCase {
         XCTAssertTrue(seen.isSuperset(of: [.drizzle, .rain, .storm]))
     }
 }
+
+final class RainEasingTests: XCTestCase {
+    func testClearFromTheMenuClearsWithinSeconds() {
+        var world = makeWorld()
+        world.setWeather(.storm)
+        world.advance(by: 30)
+        XCTAssertEqual(world.rain, 1, accuracy: 1e-9)
+        world.setWeather(.clear)
+        world.advance(by: 4)
+        XCTAssertEqual(world.rain, 0, "fully clear, not a lingering drizzle")
+        world.setWeather(nil)
+        world.advance(by: 60)
+        XCTAssertEqual(world.rain, 0, "the storm that was going doesn't come back on Live")
+    }
+
+    func testRainChangesSteadilyInOneDirection() {
+        var world = makeWorld()
+        world.setWeather(.rain)
+        var last = world.rain
+        for _ in 0..<40 {
+            world.tick(dt: 0.5)
+            XCTAssertGreaterThanOrEqual(world.rain, last)
+            last = world.rain
+        }
+        XCTAssertEqual(world.rain, Weather.rain.intensity, accuracy: 1e-9)
+    }
+
+    func testPuddlesFillAndDry() {
+        var world = makeWorld()
+        world.setWeather(.storm)
+        world.advance(by: 300)
+        XCTAssertEqual(world.wetness, 1, accuracy: 0.01)
+        world.setWeather(.clear)
+        world.advance(by: 450)
+        XCTAssertEqual(world.wetness, 0.5, accuracy: 0.02, "half dry after 7.5 minutes")
+        world.advance(by: 600)
+        XCTAssertEqual(world.wetness, 0)
+    }
+}
+
+final class SeasonTests: XCTestCase {
+    func testSeasonsFollowTheMonth() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        func on(_ m: Int) -> Date { cal.date(from: DateComponents(year: 2026, month: m, day: 15))! }
+        XCTAssertEqual(Season.of(on(1), calendar: cal), .winter)
+        XCTAssertEqual(Season.of(on(4), calendar: cal), .spring)
+        XCTAssertEqual(Season.of(on(7), calendar: cal), .summer)
+        XCTAssertEqual(Season.of(on(10), calendar: cal), .autumn)
+        XCTAssertEqual(Season.of(on(12), calendar: cal), .winter)
+        XCTAssertEqual(Season.of(on(7), southern: true, calendar: cal), .winter)
+        XCTAssertEqual(Season.of(on(1), southern: true, calendar: cal), .summer)
+    }
+}

@@ -18,6 +18,8 @@ struct SceneUniforms {
     float  flash;        // 0..1 lightning brightness
     float2 shake;        // grid px the scene is nudged by
     float  bolt;         // design-unit x of a lightning bolt, < 0 = none
+    float  wet;          // 0..1 how much water lies on the ground: puddles
+    float  season;       // 0 spring, 1 summer, 2 autumn, 3 winter
 };
 
 struct SceneItem {
@@ -224,6 +226,17 @@ static float ridgeHeight(float x, float groundTop, float skyH) {
 }
 
 /// A tiered pine at (`x`, `base`): jagged layers, lit on the left.
+/// Recolours plant and ground colours for the season: fresh in spring, warm in summer, gold and
+/// rust in autumn, and under snow in winter (keeping the light and shade of what lies beneath).
+static float3 seasonal(float3 c, float s) {
+    if (s < 0.5) return c * float3(1.0, 1.06, 0.92) + float3(0.02, 0.03, 0.0);
+    if (s < 1.5) return c * float3(1.03, 0.99, 0.88);
+    float green = max(0.0, c.y - max(c.x, c.z));
+    if (s < 2.5) return c + float3(green * 1.3, -green * 0.38, -green * 0.25);
+    float l = dot(c, float3(0.3, 0.55, 0.15));
+    return l > 0.55 ? float3(0.97, 0.98, 1.0) : l > 0.4 ? float3(0.87, 0.91, 0.98) : float3(0.73, 0.79, 0.91);
+}
+
 static bool pine(float2 p, float2 pixel, float x, float base, float h, float3 dark, float3 mid, float3 light, thread float3& col) {
     float up = p.y - base;
     if (up < -2.0 || up > h) return false;
@@ -326,10 +339,11 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float strata = noise2(float2(p.x * 0.05, p.y * 0.35));
             float3 rock = face > 0.5 ? (strata > 0.62 ? float3(0.72, 0.76, 0.88) : float3(0.62, 0.68, 0.84))
                                      : (strata > 0.62 ? float3(0.52, 0.58, 0.78) : float3(0.44, 0.51, 0.72));
-            float snowLine = groundTop + skyH * 0.30 + (noise1(p.x * 0.15) - 0.5) * 10.0 + (noise1(p.x * 0.6) - 0.5) * 4.0;
+            float snowShift = u.season > 2.5 ? -0.17 : u.season > 1.5 ? -0.03 : u.season > 0.5 ? 0.06 : -0.05;
+            float snowLine = groundTop + skyH * (0.30 + snowShift) + (noise1(p.x * 0.15) - 0.5) * 10.0 + (noise1(p.x * 0.6) - 0.5) * 4.0;
             if (p.y > snowLine) rock = face > 0.5 ? float3(0.96, 0.97, 1.0) : float3(0.72, 0.80, 0.94);
             float forest = groundTop + skyH * 0.1 + noise1(p.x * 0.04) * skyH * 0.08 + (hash11(floor(p.x / 2.5)) - 0.5) * 2.5;
-            if (p.y < forest) rock = face > 0.5 ? float3(0.36, 0.55, 0.56) : float3(0.28, 0.45, 0.50);
+            if (p.y < forest) rock = seasonal(face > 0.5 ? float3(0.36, 0.55, 0.56) : float3(0.28, 0.45, 0.50), u.season);
             col = mix(rock, bottom, 0.38) * tint;
             clouded = true;
             land = true;
@@ -341,7 +355,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         if (p.y < fringe) {
             float3 c = p.y > farH - 1.0 ? float3(0.47, 0.72, 0.68) : float3(0.38, 0.63, 0.62);
             if (p.y > farH - 3.0 && p.y <= farH - 1.0 && checker(pixel)) c = float3(0.47, 0.72, 0.68);
-            col = mix(c, bottom, 0.25) * tint;
+            col = mix(seasonal(c, u.season), bottom, 0.25) * tint;
             clouded = true;
             land = true;
         }
@@ -356,7 +370,10 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float baseY = groundTop + 7.0 + 6.0 * sin(tx * 0.021 + 2.1) + 3.0 * sin(tx * 0.055 + 5.0) - 2.0;
             float h = 14.0 + hash11(cell * 3.3) * 16.0;
             float3 c;
-            if (pine(p, pixel, tx, baseY, h, float3(0.15, 0.36, 0.30), float3(0.22, 0.48, 0.36), float3(0.36, 0.62, 0.40), c)) {
+            // Pines keep their needles; in winter snow settles on the lit side.
+            float3 pineMid = float3(0.22, 0.48, 0.36), pineLight = float3(0.36, 0.62, 0.40);
+            if (u.season > 2.5) { pineMid = float3(0.80, 0.86, 0.95); pineLight = float3(0.96, 0.98, 1.0); }
+            if (pine(p, pixel, tx, baseY, h, float3(0.15, 0.36, 0.30), pineMid, pineLight, c)) {
                 col = mix(c, bottom, 0.12) * tint;
                 clouded = true;
                 land = true;
@@ -365,7 +382,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         if (p.y < midH) {
             float l = noise2(float2(p.x * 0.05, p.y * 0.2));
             float3 c = l > 0.62 ? float3(0.46, 0.72, 0.44) : l < 0.3 ? float3(0.30, 0.56, 0.38) : float3(0.37, 0.64, 0.41);
-            col = mix(c, bottom, 0.1) * tint;
+            col = mix(seasonal(c, u.season), bottom, 0.1) * tint;
             clouded = true;
             land = true;
         }
@@ -384,7 +401,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             clouded = true;
             land = true;
         }
-        float best = -9.0, bestZ = -1e9;
+        float best = -9.0, bestZ = -1e9, bestI = 0.0;
         float treeGust = gust(treeAt.x, u.time);
         for (int i = 0; i < 16; i++) {
             float fi = float(i);
@@ -397,6 +414,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float z = -c.y + hash11(fi) * 10.0; // lower clusters sit in front
             if (dot(dd, dd) < edge * edge && z > bestZ - 1e-3) {
                 bestZ = z;
+                bestI = fi;
                 best = dot(dd, float2(-0.55, 0.72)) * 0.85 + (1.0 - length(dd)) * 0.3;
             }
         }
@@ -405,13 +423,59 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float l = best + (dapple - 0.5) * 0.45;
             float3 c = ramp5(l, pixel, float3(0.10, 0.30, 0.24), float3(0.16, 0.42, 0.29), float3(0.25, 0.56, 0.32),
                              float3(0.42, 0.70, 0.33), float3(0.64, 0.82, 0.35));
-            col = c * tint;
-            clouded = true;
-            land = true;
+            bool leafy = true;
+            if (u.season < 0.5) {
+                // Spring blossom.
+                float b = hash21(floor(p / 1.5) + 3.0);
+                if (b > 0.93) c = b > 0.975 ? float3(1.0, 0.95, 0.97) : float3(0.98, 0.72, 0.82);
+            } else if (u.season > 1.5 && u.season < 2.5) {
+                // Autumn: each cluster its own mix of gold, orange and rust.
+                float hue = hash11(bestI * 7.3);
+                c = hue < 0.4 ? ramp5(l, pixel, float3(0.36, 0.14, 0.08), float3(0.56, 0.20, 0.10), float3(0.76, 0.32, 0.12),
+                                      float3(0.90, 0.52, 0.18), float3(0.98, 0.74, 0.32))
+                              : ramp5(l, pixel, float3(0.40, 0.24, 0.08), float3(0.62, 0.38, 0.10), float3(0.82, 0.56, 0.16),
+                                      float3(0.94, 0.74, 0.26), float3(1.0, 0.88, 0.48));
+            } else if (u.season > 2.5) {
+                leafy = false; // winter: the bare branches are drawn below instead
+            }
+            if (leafy) {
+                col = c * tint;
+                clouded = true;
+                land = true;
+            }
+        }
+
+        // Winter: bare branches fanning up from the trunk, each forked, with snow along the top.
+        if (u.season > 2.5 && tp.y > 30.0 && tp.y < 100.0 && abs(tp.x) < 50.0) {
+            for (int b = 0; b < 7; b++) {
+                float fb = float(b);
+                float ang = (fb / 6.0 - 0.5) * 2.3 + (hash11(fb * 3.7) - 0.5) * 0.3;
+                float2 base = float2(0.0, 34.0 + hash11(fb * 1.3) * 18.0);
+                float len = 26.0 + hash11(fb * 2.9) * 22.0;
+                float2 dir = float2(sin(ang), cos(ang));
+                float2 tip = base + dir * len;
+                float2 mid = base + dir * len * 0.55;
+                float2 fork = mid + float2(sin(ang + 0.7 * (hash11(fb) > 0.5 ? 1.0 : -1.0)), cos(ang + 0.6)) * len * 0.45;
+                for (int seg = 0; seg < 2; seg++) {
+                    float2 a0 = seg == 0 ? base : mid;
+                    float2 a1 = seg == 0 ? tip : fork;
+                    float2 pa = tp - a0, ba = a1 - a0;
+                    float hh = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                    float d = length(pa - ba * hh);
+                    float w = (seg == 0 ? 1.8 : 1.1) * (1.0 - hh * 0.65);
+                    if (d < w + 0.6) {
+                        bool snowTop = (pa - ba * hh).y > w * 0.2;
+                        col = (snowTop ? float3(0.95, 0.97, 1.0) : float3(0.32, 0.23, 0.18)) * tint;
+                        clouded = true;
+                        land = true;
+                    }
+                }
+            }
         }
 
         // A few leaves drift down from the oak and blow away with the wind.
-        for (int i = 0; i < 6; i++) {
+        int falling = u.season > 2.5 ? 0 : u.season > 1.5 ? 14 : 6;
+        for (int i = 0; i < falling; i++) {
             float fi = float(i);
             float period = 9.0 + hash11(fi * 4.1) * 6.0;
             float age = pmod(u.time + hash11(fi * 2.2) * period, period) / period;
@@ -420,7 +484,10 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float2 q = p - leaf;
             float spin = sin(age * 25.0 + fi);
             if (abs(q.x) < 1.2 * abs(spin) + 0.4 && abs(q.y) < 0.7) {
-                col = (hash11(fi) > 0.5 ? float3(0.62, 0.80, 0.30) : float3(0.88, 0.72, 0.30)) * tint;
+                float3 leafCol = hash11(fi) > 0.5 ? float3(0.62, 0.80, 0.30) : float3(0.88, 0.72, 0.30);
+                if (u.season < 0.5) leafCol = hash11(fi) > 0.5 ? float3(0.98, 0.74, 0.84) : float3(1.0, 0.94, 0.96); // petals
+                if (u.season > 1.5) leafCol = hash11(fi) > 0.6 ? float3(0.86, 0.34, 0.14) : hash11(fi) > 0.3 ? float3(0.94, 0.62, 0.20) : float3(0.70, 0.26, 0.12);
+                col = leafCol * tint;
             }
         }
     }
@@ -474,14 +541,56 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         if (p.y < walk) c = mix(c, float3(0.26, 0.50, 0.28), 0.2 + 0.35 * smoothstep(walk, 0.0, p.y));
         c = mix(c, bottom, (1.0 - nearness) * 0.3);
         if (fromHorizon < 1.0) c = mix(float3(0.58, 0.80, 0.42), bottom, 0.2);
-        col = c * tint;
+        col = seasonal(c, u.season) * tint;
+
+        // Puddles: they spread as the ground gets wet, mirror the sky, darken the soil
+        // around them and ripple while it rains.
+        if (u.wet > 0.01 && u.season < 2.5) { // in winter it lies as snow instead
+            for (int i = 0; i < 8; i++) {
+                float fi = float(i);
+                float h1 = hash11(fi * 4.13 + 0.7), h2 = hash11(fi * 9.71 + 2.3);
+                float2 c0 = float2(16.0 + h1 * (width - 32.0),
+                                   i < 3 ? walk - 1.5 : 4.0 + h2 * max(1.0, walk - 12.0));
+                float grow = smoothstep(h2 * 0.5, h2 * 0.5 + 0.45, u.wet);
+                float rx = (8.0 + hash11(fi * 2.9) * 13.0) * grow;
+                if (rx < 0.8) continue;
+                float ry = rx * 0.28;
+                float2 q = p - c0;
+                if (abs(q.x) > rx * 1.5 || abs(q.y) > ry * 1.6) continue;
+                float e = dot(q / float2(rx, ry), q / float2(rx, ry)) + (noise2(p * 0.35 + fi * 7.0) - 0.5) * 0.45;
+                if (e < 1.0) {
+                    float3 sky = mix(bottom, top, 0.35 + 0.3 * clamp(-q.y / ry, 0.0, 1.0)) * tint;
+                    float3 water = mix(sky * 0.82, float3(0.20, 0.27, 0.34) * tint, e > 0.72 ? 0.45 : 0.12);
+                    if (e > 0.72 && checker(pixel)) water = mix(water, col * 0.7, 0.4);
+                    // A glint across the surface.
+                    if (abs(q.y - ry * 0.35) < 0.4 && abs(q.x + rx * 0.2) < rx * 0.35) water = mix(water, float3(0.92, 0.96, 1.0) * tint, 0.55);
+                    // Rain rings.
+                    if (u.rain > 0.05) {
+                        for (int j = 0; j < 3; j++) {
+                            float fj = float(j) + fi * 3.0;
+                            float phase = fract(u.time * (0.7 + hash11(fj) * 0.6) + hash11(fj * 1.7));
+                            float2 rc = c0 + float2((hash11(fj * 5.1) - 0.5) * rx * 1.2, (hash11(fj * 6.3) - 0.5) * ry * 0.9);
+                            float2 rq = p - rc;
+                            float rr = length(float2(rq.x, rq.y * 3.2));
+                            float ring = phase * 3.5;
+                            if (abs(rr - ring) < 0.45 && hash11(fj * 8.0) < u.rain + 0.2) water = mix(water, float3(0.85, 0.91, 1.0) * tint, 0.6 * (1.0 - phase));
+                        }
+                    }
+                    col = water;
+                    break;
+                } else if (e < 1.45) {
+                    col *= 0.8; // soaked soil around the edge
+                }
+            }
+        }
 
         // Grass tufts and flowers that sway in the breeze and lean into each gust.
         float2 cell = floor(p / float2(7.0, 4.0));
         for (int dx = -1; dx <= 1; dx++) {
             float2 cc = cell + float2(float(dx), 0.0);
             float h = hash21(cc + 31.0);
-            if (h < 0.55) continue;
+            // Most tufts in spring and fewest in winter, when only dry stalks poke through.
+            if (h < (u.season > 2.5 ? 0.8 : 0.55)) continue;
             float2 root = cc * float2(7.0, 4.0) + float2(1.0 + hash21(cc + 3.0) * 5.0, 0.5);
             if (abs(root.y - walk) < 3.0 || root.y > groundTop - 2.0) continue;
             float scale = 0.6 + nearness * 0.9;
@@ -491,9 +600,13 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float bend = (sin(u.time * 1.8 + cc.x * 0.7) * 0.35 - gust(root.x, u.time) * 1.6) * scale;
             float f = up / stemH;
             float sx = root.x + bend * f * f;
-            bool flower = h > 0.88;
+            float flowerOdds = u.season < 0.5 ? 0.8 : u.season < 1.5 ? 0.88 : u.season < 2.5 ? 0.95 : 2.0;
+            bool flower = h > flowerOdds;
             if (up <= stemH && abs(p.x - sx) < 0.28 * max(1.0, scale)) {
-                col = (flower ? float3(0.30, 0.56, 0.28) : float3(0.56, 0.80, 0.40)) * tint;
+                float3 stem = flower ? float3(0.30, 0.56, 0.28) : float3(0.56, 0.80, 0.40);
+                if (u.season > 2.5) stem = float3(0.58, 0.50, 0.36);
+                else if (u.season > 1.5) stem = seasonal(stem, u.season);
+                col = stem * tint;
             }
             if (flower) {
                 float2 head = float2(root.x + bend, root.y + stemH);
@@ -501,6 +614,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
                 float r = 1.1 * scale;
                 float kind = hash21(cc + 7.0);
                 float3 petal = kind < 0.4 ? float3(1.0, 0.98, 0.92) : kind < 0.75 ? float3(0.99, 0.84, 0.32) : float3(0.98, 0.60, 0.70);
+                if (u.season > 1.5) petal = kind < 0.5 ? float3(0.96, 0.62, 0.22) : float3(0.82, 0.36, 0.18); // autumn asters
                 if (length(q) < r) col = (length(q) < r * 0.4 ? float3(0.97, 0.72, 0.25) : petal) * tint;
             }
         }
@@ -513,8 +627,8 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
     if (p.y >= groundTop && p.y < groundTop + 40.0 && clouded && (u.background.x & kBackgroundImage) == 0u &&
         noise2(float2(p.x * 0.006 + u.time * 0.012, p.y * 0.02)) > 0.66) col *= 0.9;
 
-    // Floating motes: pollen by day, fireflies by night.
-    int motes = night > 0.5 ? 18 : 10;
+    // Floating motes: pollen by day, fireflies on spring and summer nights. None in winter.
+    int motes = u.season > 2.5 ? 0 : night > 0.5 ? (u.season < 1.5 ? 18 : 0) : 10;
     for (int i = 0; i < motes; i++) {
         float fi = float(i);
         float2 m = float2(pmod(hash11(fi * 3.7) * width - u.time * (2.0 + hash11(fi) * 3.0), width),
@@ -558,16 +672,35 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
     // Rain: thin diagonal streaks, sparse in a drizzle and dense in a storm, darkening the day.
     if (u.rain > 0.01) {
         col *= 1.0 - 0.10 * u.rain - 0.14 * smoothstep(0.7, 1.0, u.rain);
-        float lane = pixel.x - pixel.y * (0.5 + 0.3 * u.rain);
+        // Speed and slant stay fixed: if they followed the intensity, the drops would lurch
+        // backward while the rain eased in or out. Time wraps each minute to keep precision.
+        float lane = pixel.x - pixel.y * 0.6;
         float hl = hash11(floor(lane) * 0.731);
-        if (hl < 0.13 * u.rain) {
-            float speed = 200.0 + 160.0 * u.rain;
-            float s2 = pixel.y + u.time * speed + hl * 997.0;
+        bool winter = u.season > 2.5;
+        if (winter) {
+            // Snow instead of rain: soft flakes drifting down and sideways, in two sizes.
+            for (int layer = 0; layer < 2; layer++) {
+                float fl = float(layer);
+                float size = (layer == 0 ? 1.0 : 0.5) * k;
+                float cellS = (layer == 0 ? 14.0 : 9.0) * k;
+                float t = pmod(u.time, 120.0);
+                float2 fp = pixel + float2(sin(t * 0.6 + pixel.y * 0.02 + fl) * 4.0 * k - t * 6.0 * k, t * (layer == 0 ? 26.0 : 16.0) * k);
+                float2 cellF = floor(fp / cellS);
+                float hf = hash21(cellF + fl * 17.0);
+                if (hf < 0.5 * u.rain) {
+                    float2 c = cellF * cellS + floor(float2(hash21(cellF + 4.0), hash21(cellF + 8.0)) * (cellS - 2.0 * k)) + k;
+                    float2 q = fp - c;
+                    if (q.x >= 0.0 && q.y >= 0.0 && q.x < size * 2.0 && q.y < size * 2.0) col = mix(col, float3(0.97, 0.98, 1.0), layer == 0 ? 0.9 : 0.6);
+                }
+            }
+        }
+        if (!winter && hl < 0.13 * u.rain) {
+            float s2 = pixel.y + pmod(u.time, 60.0) * 320.0 + hl * 997.0;
             if (pmod(s2, 90.0 + floor(hl * 400.0)) < 3.0 + 5.0 * u.rain) col = mix(col, float3(0.78, 0.84, 0.95), 0.5);
         }
 
         // Splashes where drops hit the meadow: a dot, then a little crown and a ripple.
-        if (p.y < walk + 26.0) {
+        if (!winter && p.y < walk + 26.0) {
             float2 cellSize = float2(11.0, 7.0) * k;
             float2 site = floor(pixel / cellSize);
             float h = hash21(site * 1.37 + 3.1);
@@ -614,6 +747,8 @@ static float3 foreground(float2 pixel, constant SceneUniforms& u, float3 col) {
                        - gust(g.x, u.time) * 6.0;
             if (abs(pixel.x - bx - lean * t * t) < 0.6) {
                 float3 c = t > 0.65 ? float3(0.62, 0.84, 0.42) : t > 0.3 ? float3(0.45, 0.72, 0.36) : float3(0.32, 0.56, 0.30);
+                if (u.season > 2.5) c = t > 0.6 ? float3(0.66, 0.58, 0.42) : float3(0.50, 0.42, 0.30); // dry stalks
+                else c = seasonal(c, u.season);
                 col = c * tint;
             }
         }
@@ -626,7 +761,7 @@ static float3 foreground(float2 pixel, constant SceneUniforms& u, float3 col) {
     if (g.y < edge) {
         float3 c = g.y > edge - 2.0 ? float3(0.36, 0.60, 0.32) : float3(0.20, 0.40, 0.25);
         if (g.y <= edge - 2.0 && g.y > edge - 4.0 && checker(pixel)) c = float3(0.28, 0.50, 0.29);
-        col = c * tint;
+        col = seasonal(c, u.season) * tint; // a snow bank in winter
     }
     if (u.playMode > 0.5) col *= 0.85;
     return col;

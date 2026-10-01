@@ -4,8 +4,6 @@ import Foundation
 // Epic animals are plainly magical. Legendary ones carry glowing details in fixed ramps (gold, red, blue,
 // white) so they look legendary whatever their body colour.
 
-/// Set while the shared front rig draws a wave-5 animal, so `frontalWave5` can decorate its result.
-private var w5InSharedFront = false
 
 extension SpeciesRig {
     /// Side rigs for this wave. Returns nil for any other shape.
@@ -33,10 +31,7 @@ extension SpeciesRig {
             return w5WhaleFront(pose, back: back)
         case .jackalope, .qilin, .mothkin, .wyvern, .phoenix, .spiritStag, .thunderbird, .sphinx, .cerberus:
             // Draw the shared body from the profile, then add what the profile can't express.
-            guard !w5InSharedFront else { return nil }
-            w5InSharedFront = true
-            var b = frontal(shape, pose: pose, back: back)
-            w5InSharedFront = false
+            var b = frontal(shape, pose: pose, back: back, custom: false)
             w5DecorateFront(shape, &b, pose: pose, back: back)
             return b
         default:
@@ -199,7 +194,7 @@ extension SpeciesRig {
     static func w5Qilin(_ pose: Pose) -> Built {
         var spec = QuadSpec()
         spec.bodyR = V2(8.2, 5.2)
-        spec.bodyX = 13.5
+        spec.bodyX = 14.6
         spec.legLen = 6
         spec.legR = (1.6, 1.1)
         spec.legX = (5.5, -5.5)
@@ -260,11 +255,11 @@ extension SpeciesRig {
         }
         // A lion's tail ending in a flame-like tuft.
         let base = q.bodyC + rotate(V2(-q.bodyR.x * 0.9, q.bodyR.y * 0.3), by: q.angle)
-        let tailParts = tail(from: base, angle: 3.6 + pose.tail * 0.3 - pose.dangle, curl: -0.3, segments: 3, length: 2.4,
+        let tailParts = tail(from: base, angle: 2.95 + pose.tail * 0.3 - pose.dangle, curl: -0.35, segments: 3, length: 1.8,
                              radius: (1.0, 0.7), ramp: .body, z: -1)
         b.parts += tailParts
         if case let .capsule(_, tip, _, _) = tailParts.last!.shape {
-            let spine = w5Curve(from: tip + V2(0.5, 0.3), angle: 2.4 + pose.tail * 0.3, curl: -0.4, steps: 3, step: 1.5)
+            let spine = w5Curve(from: tip + V2(0.5, 0.3), angle: 1.6 + pose.tail * 0.3, curl: -0.4, steps: 3, step: 1.4)
             b.parts.append(Part(w5Ribbon(spine, [1.2, 1.6, 1.2, 0.3]), .secondary, z: -0.9, group: 5))
         }
         b.eyeX = (0.2, 0.6)
@@ -362,7 +357,7 @@ extension SpeciesRig {
         let legLen = 5.0 * (1 - 0.75 * pose.lying) * (1 + 0.2 * pose.dangle)
         let angle = 0.2 + pose.lean + pose.sway - pose.lying * 0.2
         let bodyR = V2(6 / squash.squareRoot(), 4.4 * squash)
-        let bodyC = V2(13.5 + pose.lunge, ground + legLen + bodyR.y * 0.8 + pose.bob + pose.lift)
+        let bodyC = V2(15.4 + pose.lunge, ground + legLen + bodyR.y * 0.8 + pose.bob + pose.lift * 0.8)
         b.parts.append(Part(.ellipse(c: bodyC, r: bodyR, angle: angle), .body, z: 0, group: 0, patterned: true, role: .torso))
         // Belly plates.
         let belly = bodyC + rotate(V2(1.4, -1.9), by: angle)
@@ -428,7 +423,7 @@ extension SpeciesRig {
         for near in [false, true] {
             let shoulder = bodyC + rotate(V2(2 - (near ? 0 : 1.4), 3.2 + (near ? 0 : 1)), by: angle)
             let wa = angle * 0.5 - (near ? 0 : 0.22) - flap * 0.15
-            let fy = 1 + flap * 0.18 - pose.lying * 0.2
+            let fy = 1 + flap * 0.08 - pose.lying * 0.2
             let elbow = V2(-2.2, 3.4), wrist = V2(0.2, 7.6)
             let f1 = V2(-3.2, 11), f2 = V2(-7.6, 9.6), f3 = V2(-9.8, 5.2)
             let membrane = w5Local(shoulder, wa, [V2(0.6, 0), wrist, f1, V2(-4.6, 8.4), f2, V2(-7.6, 6.4), f3, V2(-6.6, 3.4),
@@ -447,7 +442,7 @@ extension SpeciesRig {
         // Long tail ending in a spade.
         let base = bodyC + rotate(V2(-bodyR.x * 0.85, -0.4), by: angle)
         let tailParts = tail(from: base, angle: 3.45 + pose.tail * 0.2 - pose.lying * 0.3 - pose.dangle * 0.6, curl: -0.4,
-                             segments: 4, length: 2.2, radius: (2, 0.7), ramp: .body, z: -1)
+                             segments: 4, length: 1.9, radius: (2, 0.7), ramp: .body, z: -1)
         b.parts += tailParts
         if case let .capsule(a, tip, _, _) = tailParts.last!.shape {
             let d = (tip - a) / max(0.001, ((tip - a).x * (tip - a).x + (tip - a).y * (tip - a).y).squareRoot())
@@ -470,7 +465,7 @@ extension SpeciesRig {
         let legLen = 3.4 * (1 - pose.lying) * (1 + 0.3 * pose.dangle)
         let angle = pose.lean + pose.sway
         let bodyR = V2(4.8 / squash.squareRoot(), 5.4 * squash)
-        let bodyC = V2(17.5 + pose.lunge, ground + legLen + bodyR.y * 0.8 + pose.bob + pose.lift * 0.75)
+        let bodyC = V2(18 + pose.lunge, ground + legLen + bodyR.y * 0.8 + pose.bob + pose.lift * 0.75)
         b.parts.append(Part(.ellipse(c: bodyC, r: bodyR, angle: angle - 0.45), .body, z: 0, group: 0, patterned: true, role: .torso))
         b.parts.append(Part(.ellipse(c: bodyC + rotate(V2(2, 0), by: angle), r: V2(2.6, 4.4), angle: angle - 0.45), .gold, z: 0.1,
                             group: 0))
@@ -751,7 +746,7 @@ extension SpeciesRig {
         let legLen = 3.2 * (1 - pose.lying) * (1 + 0.3 * pose.dangle)
         let angle = pose.lean + pose.sway
         let bodyR = V2(5.2 / squash.squareRoot(), 6.2 * squash)
-        let bodyC = V2(15 + pose.lunge, ground + legLen + bodyR.y * 0.78 + pose.bob + pose.lift * 0.8)
+        let bodyC = V2(15.8 + pose.lunge, ground + legLen + bodyR.y * 0.78 + pose.bob + pose.lift * 0.8)
         b.parts.append(Part(.ellipse(c: bodyC, r: bodyR, angle: angle - 0.3), .body, z: 0, group: 0, patterned: true, role: .torso))
         b.parts.append(Part(.ellipse(c: bodyC + rotate(V2(2, -0.6), by: angle), r: V2(2.8, 4.6), angle: angle - 0.3), .secondary,
                             z: 0.1, group: 0))
@@ -857,7 +852,7 @@ extension SpeciesRig {
     static func w5Sphinx(_ pose: Pose) -> Built {
         var spec = QuadSpec()
         spec.bodyR = V2(8.2, 5.2)
-        spec.bodyX = 13.5
+        spec.bodyX = 14.8
         spec.legLen = 4.2
         spec.legR = (2, 1.7)
         spec.legX = (4.8, -5)
@@ -939,8 +934,8 @@ extension SpeciesRig {
                             group: 46, innerOutline: false))
         // A lion's tail with a dark tuft.
         let base = q.bodyC + rotate(V2(-q.bodyR.x * 0.9, q.bodyR.y * 0.1), by: q.angle)
-        let tailParts = tail(from: base, angle: 3.5 + pose.tail * 0.3 - pose.dangle - (resting ? 0.3 : 0), curl: -0.45,
-                             segments: 3, length: 2.6, radius: (0.9, 0.7), ramp: .body, z: -1)
+        let tailParts = tail(from: base, angle: 2.9 + pose.tail * 0.3 - pose.dangle - (resting ? 0.2 : 0), curl: -0.5,
+                             segments: 3, length: 2.2, radius: (0.9, 0.7), ramp: .body, z: -1)
         b.parts += tailParts
         if case let .capsule(_, tip, _, _) = tailParts.last!.shape {
             b.parts.append(Part(.ellipse(c: tip, r: V2(1.5, 1.5), angle: 0), .dark, z: -0.9, group: 5))
@@ -974,12 +969,12 @@ extension SpeciesRig {
     static func w5Cerberus(_ pose: Pose) -> Built {
         var spec = QuadSpec()
         spec.bodyR = V2(7.6, 5.2)
-        spec.bodyX = 13
+        spec.bodyX = 13.9
         spec.legLen = 4.4
         spec.legR = (1.8, 1.4)
         spec.legX = (4.4, -4.6)
         spec.headR = 4.2
-        spec.headOffset = V2(8.4, 4.4)
+        spec.headOffset = V2(7.8, 4.6)
         spec.bellyR = V2(4, 2)
         let q = quadruped(spec, pose)
         var b = q.built
@@ -1004,17 +999,19 @@ extension SpeciesRig {
         }
         // Spiked collar where the necks meet the chest.
         let ca = q.bodyC + rotate(V2(4.6, 4.2), by: q.angle), cb = q.bodyC + rotate(V2(7.4, -0.6), by: q.angle)
-        b.parts.append(Part(.capsule(a: ca, b: cb, ra: 1.2, rb: 1.2), .red, z: 0.95, group: 10))
+        b.parts.append(Part(.capsule(a: ca, b: cb, ra: 1.2, rb: 1.2), .dark, z: 0.95, group: 10))
         let d = (cb - ca) / max(0.001, ((cb - ca).x * (cb - ca).x + (cb - ca).y * (cb - ca).y).squareRoot())
         let n = V2(-d.y, d.x) * -1
         for t in [0.15, 0.5, 0.85] {
             let p = ca + (cb - ca) * t + n * 0.8
             b.parts.append(Part(.polygon([p + d * 0.8, p - d * 0.8, p + n * 2]), .stone, z: 0.96, group: 10))
+            b.parts.append(Part(.ellipse(c: p - n * 0.8, r: V2(0.45, 0.45), angle: 0), .red, z: 0.97, group: 10, innerOutline: false,
+                                fixedTone: .light))
         }
         // A tail that burns at its tip.
         let base = q.bodyC + rotate(V2(-q.bodyR.x * 0.85, q.bodyR.y * 0.25), by: q.angle)
         let tailParts = tail(from: base, angle: 2.4 + pose.tail * 0.3 - pose.dangle * 1.2 - pose.lying * 0.8, curl: -0.35,
-                             segments: 3, length: 2.8, radius: (1.3, 0.9), ramp: .body, z: -1)
+                             segments: 3, length: 2.3, radius: (1.3, 0.9), ramp: .body, z: -1)
         b.parts += tailParts
         if case let .capsule(a, tip, _, _) = tailParts.last!.shape {
             let dir = atan2(tip.y - a.y, tip.x - a.x)
@@ -1165,7 +1162,7 @@ extension SpeciesRig {
             b.parts += w5Motes(pose, around: c + V2(0, 6), spread: V2(10, 6), ramp: .red, core: .gold, rise: true)
         case .spiritStag:
             for s in sides {
-                b.parts += w5Antler(w5StagAntler, root: b.onHead(V2(s * 0.45, 0.75)), scale: 0.85, lean: -s * 0.3, flip: -s, ramp: .blue,
+                b.parts += w5Antler(w5StagAntler, root: b.onHead(V2(s * 0.45, 0.75)), scale: 0.78, lean: -s * 0.3, flip: -s, ramp: .blue,
                                     z: back ? 0.6 : faceZ - 0.15, group: s < 0 ? 40 : 41, glow: .light)
             }
             if !back {
@@ -1279,13 +1276,15 @@ extension SpeciesRig {
                 b.parts.append(Part(.ellipse(c: b.onHead(V2(0, -0.22)), r: V2(0.85, 0.65), angle: 0), .dark, z: faceZ + 0.2, group: 1))
             }
             // Spiked collar across the chest.
-            let collar = c + V2(0, r.y * 0.55)
-            b.parts.append(Part(w5Wedge(collar + V2(0, 5), r0: 5.6, r1: 7, a0: -2.4, a1: -0.74), .red, z: back ? 0.3 : 0.5, group: 10))
+            let collar = c + V2(0, r.y * 0.55 - 1.4)
+            b.parts.append(Part(w5Wedge(collar + V2(0, 5), r0: 5.8, r1: 7.2, a0: -2.5, a1: -0.64), .dark, z: back ? 0.3 : 0.95, group: 10))
             if !back {
                 for a in [-2.1, -1.57, -1.04] {
-                    let p = collar + V2(0, 5) + V2(cos(a), sin(a)) * 6.8
+                    let p = collar + V2(0, 5) + V2(cos(a), sin(a)) * 7
                     let out = V2(cos(a), sin(a)), side = V2(-out.y, out.x)
-                    b.parts.append(Part(.polygon([p + side * 0.8, p - side * 0.8, p + out * 1.9]), .stone, z: 0.51, group: 10))
+                    b.parts.append(Part(.polygon([p + side * 0.8, p - side * 0.8, p + out * 1.9]), .stone, z: 0.96, group: 10))
+                    b.parts.append(Part(.ellipse(c: p - out * 0.7, r: V2(0.45, 0.45), angle: 0), .red, z: 0.97, group: 10,
+                                        innerOutline: false, fixedTone: .light))
                 }
             }
         default:

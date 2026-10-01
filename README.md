@@ -20,7 +20,7 @@ The pets live under your desktop icons. To interact with them, press **⌥⌘P**
 | Pet | Click a pet. Hearts pop out. |
 | Rub | Hold the button and wiggle side to side over a pet. Counts as three pets. |
 | Pet an egg | Click it. Takes a minute off the hatch time, up to five. |
-| Feed | Hold **F** and click the ground. A hungry pet walks over. |
+| Feed | Hold **F** and click the ground. A hungry pet walks over and eats it. Greedy pets come any time; Picky pets only once their food is 65 or below. If nobody comes, a note says why (asleep, not hungry yet, busy fighting). |
 | Pick up | Press on a pet and drag up or away. Brave pets like it; Timid ones don't. |
 | Throw into a fight | Drop a pet onto a monster. Its first hit does double damage. |
 | Hit a monster | Click it. |
@@ -78,7 +78,9 @@ A happy adult lays an egg. The chick inherits its parent's genes with a few muta
 
 ## Backgrounds
 
-The landscape is drawn by the shader: clouds, distant mountains, pine-covered hills, a big oak and a meadow, lit for the time of day. Wind gusts roll through the grass and flowers, leaves fall from the oak, cloud shadows drift past, birds cross by day, and fireflies, stars, a moon and sometimes an aurora come out at night. A couple of times a day it rains: a light drizzle, steady rain, or a thunderstorm with a grey sky and lightning. Drops splash on the meadow.
+The landscape is drawn by the shader: clouds, distant mountains, pine-covered hills, a big oak and a meadow, lit for the time of day. Wind gusts roll through the grass and flowers, leaves fall from the oak, cloud shadows drift past, birds cross by day, and fireflies, stars, a moon and sometimes an aurora come out at night. A couple of times a day it rains: a light drizzle, steady rain, or a thunderstorm with a grey sky and lightning. Drops splash on the meadow, and puddles gather the longer it rains, mirror the sky, ripple, and dry up over about 15 minutes.
+
+The landscape follows the **seasons** (from the calendar, flipped for the southern hemisphere, or chosen from the **Season** menu): blossom and extra flowers in spring; warm greens and fireflies in summer; a gold and rust oak, amber meadow and showers of falling leaves in autumn; snow on the ground, pines and peaks, a bare snowy oak, and snowfall instead of rain in winter.
 
 To use your own picture instead, choose **Background → Open Backgrounds Folder…**, drop PNG or JPG images into `~/Library/Application Support/PixelPets/Backgrounds/`, then pick one from the **Background** menu. It is cropped to fill the screen and tinted for dawn, dusk and night. Pets walk on a line a quarter of the way up the screen.
 
@@ -99,7 +101,7 @@ Every ten minutes of daytime there is a one-in-five chance a monster wanders in 
 
 ## Menu
 
-Play Mode, chests and loot, each pet (looks, rarity, lineage, traits, needs, equipment, and **Give from Bag**), eggs (and egg potions), the Bag, the Graveyard, Time of Day, Weather (Live, Clear, Light Rain, Rain, Thunderstorm), Background, Pause, Frame Rate, Notifications, Hide Other Apps in Play Mode, Launch at Login, Quit.
+Play Mode, chests and loot, each pet (looks, rarity, lineage, traits, needs, equipment, and **Give from Bag**), eggs (and egg potions), the Bag, the Graveyard, Time of Day, Weather (Live, Clear, Light Rain, Rain, Thunderstorm), Season, Background, Pause, Frame Rate, Notifications, Hide Other Apps in Play Mode, Launch at Login, Quit.
 
 ## Files
 

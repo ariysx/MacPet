@@ -68,6 +68,8 @@ struct World: Codable {
     /// Set from the menu to hold one kind of weather; nil lets it change by itself.
     var weatherOverride: Weather?
     private var lightningTimer: Double = 0
+    /// 0...1, water lying on the ground: fills while it rains, dries over about 15 minutes after.
+    var wetness: Double = 0
     /// Lightning strikes since the app last looked, as x positions. The app drains this.
     var lightning: [Double] = []
     var playerHitCooldown: Double = 0
@@ -423,8 +425,25 @@ struct World: Codable {
         case .greedy:
             return true
         case .picky:
-            return pet.hunger <= 50 && (pet.hunger < 30 || abs(pet.x - x) <= World.pickyRange)
+            return pet.hunger <= World.pickyHunger && (pet.hunger < 30 || abs(pet.x - x) <= World.pickyRange)
         }
+    }
+
+    /// Picky pets only come for food at or below this hunger.
+    static let pickyHunger: Double = 65
+
+    /// Why nobody is walking over to the food just dropped at `x`, or nil if someone is.
+    func whyNobodyEats(at x: Double) -> String? {
+        guard !pellets.contains(where: { abs($0.x - clampX(x)) < 0.5 && $0.claimedBy != nil }) else { return nil }
+        let awake = pets.filter { !$0.isAsleep }
+        if pets.isEmpty { return "no pets to feed yet" }
+        if awake.isEmpty { return "everyone is asleep" }
+        if let busy = awake.first(where: { $0.isEating }) { return "\(busy.name) is still eating" }
+        if monster != nil { return "they're busy fighting" }
+        if let picky = awake.first(where: { $0.traits.appetite == .picky && $0.hunger > World.pickyHunger }) {
+            return "\(picky.name) is picky: not hungry yet"
+        }
+        return "nobody is hungry"
     }
 
     private mutating func assignFood() {
@@ -466,7 +485,18 @@ struct World: Codable {
         rainRemaining = max(0, rainRemaining - dt)
         if rainRemaining <= 0 { weather = .clear }
         let now = weatherOverride ?? weather
-        rain += (now.intensity - rain) * min(1, dt / 20)
+        // Ease toward the weather at a steady pace: about 15 s from dry to a storm, and 3 s
+        // when the weather was picked from the menu, so Clear really clears.
+        let step = dt / (weatherOverride == nil ? 15 : 3)
+        rain += max(-step, min(step, now.intensity - rain))
+        if rain < 0.005 { rain = 0 }
+
+        // Puddles fill in about 4 minutes of steady rain and dry slowly once it stops.
+        if rain > 0.05 {
+            wetness = min(1, wetness + rain * dt / 240)
+        } else {
+            wetness = max(0, wetness - dt / 900)
+        }
 
         // Storms throw lightning every 6 to 20 s once the rain is heavy.
         if now == .storm && rain > 0.7 {
@@ -475,6 +505,16 @@ struct World: Codable {
                 lightningTimer = random.double(in: 6...20)
                 lightning.append(random.double(in: 20...(World.width - 20)))
             }
+        }
+    }
+
+    /// Holds one kind of weather, or nil to let it change by itself. Choosing Clear also ends
+    /// any natural shower, so it doesn't come back when the weather goes back to Live.
+    mutating func setWeather(_ choice: Weather?) {
+        weatherOverride = choice
+        if choice == .clear {
+            rainRemaining = 0
+            weather = .clear
         }
     }
 
@@ -630,6 +670,19 @@ struct World: Codable {
             if let weapon = pets[i].weapon, pets[i].weaponDurability <= 0 { pets[i].weaponDurability = weapon.maxDurability }
         }
     }
+}
+
+enum Season: Int, CaseIterable {
+    case spring, summer, autumn, winter
+
+    /// The season for a date, northern or southern hemisphere.
+    static func of(_ date: Date, southern: Bool = false, calendar: Calendar = .current) -> Season {
+        let month = calendar.component(.month, from: date) // 1...12
+        let north: Season = [12, 1, 2].contains(month) ? .winter : month <= 5 ? .spring : month <= 8 ? .summer : .autumn
+        return southern ? Season(rawValue: (north.rawValue + 2) % 4)! : north
+    }
+
+    var title: String { String(describing: self).capitalized }
 }
 
 enum Weather: String, CaseIterable {

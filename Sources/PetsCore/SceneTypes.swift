@@ -15,6 +15,8 @@ struct SceneUniforms {          // buffer(0)
     var flash: Float = 0                  // 0..1 lightning brightness
     var shake: SIMD2<Float> = .zero       // grid px the scene is nudged by, for heavy hits
     var bolt: Float = -1                  // design-unit x of a lightning bolt, < 0 = none
+    var wet: Float = 0                    // 0..1 water on the ground, for puddles
+    var season: Float = 1                 // 0 spring, 1 summer, 2 autumn, 3 winter
 }
 
 struct SceneItem {              // buffer(1), array of up to 32

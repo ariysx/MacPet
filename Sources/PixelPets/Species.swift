@@ -932,10 +932,12 @@ struct FrontProfile {
 }
 
 extension SpeciesRig {
-    static func frontal(_ shape: BodyShape, pose: Pose, back: Bool) -> Built {
-        if let custom = frontalWave3(shape, pose: pose, back: back) ?? frontalWave4(shape, pose: pose, back: back)
+    /// `custom: false` builds the shared profile body only; the wave files use it as a base
+    /// before adding their own parts.
+    static func frontal(_ shape: BodyShape, pose: Pose, back: Bool, custom: Bool = true) -> Built {
+        if custom, let built = frontalWave3(shape, pose: pose, back: back) ?? frontalWave4(shape, pose: pose, back: back)
             ?? frontalWave5(shape, pose: pose, back: back) {
-            return custom
+            return built
         }
         let p = FrontProfile.of(shape)
         var b = Built()

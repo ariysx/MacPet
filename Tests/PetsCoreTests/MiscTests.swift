@@ -198,6 +198,8 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.flash), 64)
         XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.shake), 72)
         XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.bolt), 80)
+        XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.wet), 84)
+        XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.season), 88)
         XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.shadow), 76)
     }
 }

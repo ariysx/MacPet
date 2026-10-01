@@ -150,11 +150,12 @@ final class NeedsTests: XCTestCase {
         XCTAssertEqual(pet.feeling, .sick)
     }
 
-    func testPickyIgnoresFoodAbove50() {
+    func testPickyIgnoresFoodUntilHungry() {
         var world = makeWorld()
         let id = addPet(&world, x: 150)
-        world.update(id) { $0.hunger = 60 }
+        world.update(id) { $0.hunger = 75 }
         world.dropPellet(x: 170)
+        XCTAssertEqual(world.whyNobodyEats(at: 170), "\(world[pet: id]!.name) is picky: not hungry yet")
         world.advance(by: 5)
         XCTAssertEqual(world.pellets.count, 1)
         world.update(id) { $0.hunger = 45 }

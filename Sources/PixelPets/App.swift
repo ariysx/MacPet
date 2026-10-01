@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         static let background = "background"
         static let timeOfDay = "timeOfDay"
         static let weather = "weather"
+        static let season = "season"
     }
 
     private static let timesOfDay: [(String, Double?)] = [("Live", nil), ("Dawn", 6.5), ("Day", 12), ("Dusk", 19.3), ("Night", 23.5)]
@@ -92,6 +93,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     private var freezeStart = 0.0, freezeEnd = 0.0, frozenTotal = 0.0
     private var shakeUntil = 0.0, shakeAmount: Float = 0
+
+    /// The season the landscape shows: from the menu, or the calendar (southern hemisphere
+    /// when the system region is south of the equator).
+    var season: Season {
+        if let raw = defaults.object(forKey: Key.season) as? Int, let s = Season(rawValue: raw) { return s }
+        return Season.of(Date(), southern: Self.southernRegions.contains(Locale.current.region?.identifier ?? ""))
+    }
+    private static let southernRegions: Set<String> = ["AU", "NZ", "AR", "CL", "UY", "PY", "ZA", "BR", "PE", "BO", "NA", "BW",
+                                                       "ZW", "MZ", "MG", "LS", "SZ", "FJ", "NC", "PG"]
     private var flashStart = -10.0
     private var boltX: Float = -1
 
@@ -657,7 +667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let wsub = NSMenu()
         for choice in [nil] + Weather.allCases.map(Optional.some) {
             let row = action(choice?.title ?? "Live") { [unowned self] in
-                world.weatherOverride = choice
+                world.setWeather(choice)
                 defaults.set(choice?.rawValue, forKey: Key.weather)
             }
             row.state = world.weatherOverride == choice ? .on : .off
@@ -665,6 +675,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         weather.submenu = wsub
         menu.addItem(weather)
+        let seasons = NSMenuItem(title: "Season", action: nil, keyEquivalent: "")
+        let ssub = NSMenu()
+        let chosen = defaults.object(forKey: Key.season) as? Int
+        let live = action("Live (\(season.title))") { [unowned self] in self.defaults.removeObject(forKey: Key.season) }
+        live.state = chosen == nil ? .on : .off
+        ssub.addItem(live)
+        for s in Season.allCases {
+            let row = action(s.title) { [unowned self] in self.defaults.set(s.rawValue, forKey: Key.season) }
+            row.state = chosen == s.rawValue ? .on : .off
+            ssub.addItem(row)
+        }
+        seasons.submenu = ssub
+        menu.addItem(seasons)
         menu.addItem(action(userPaused ? "Resume" : "Pause") { [unowned self] in
             userPaused.toggle()
             lastTick = CACurrentMediaTime()

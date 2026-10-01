@@ -484,20 +484,14 @@ extension SpeciesRig {
 
     // MARK: Front and back views
 
-    private static let w3BusyKey = "PixelPets.w3FrontalBusy"
 
     /// Fully custom front or back views, for animals the shared FrontProfile can't express.
     /// Returns nil to use the profile from `FrontProfile.wave3`.
     static func frontalWave3(_ shape: BodyShape, pose: Pose, back: Bool) -> Built? {
         if shape == .snail { return w3SnailFront(pose, back: back) }
-        // The rest start from the shared profile rig and add their own features. `frontal` calls
-        // back into this function, so a per-thread flag lets the inner call fall through.
+        // The rest start from the shared profile rig and add their own features.
         guard FrontProfile.wave3(shape) != nil else { return nil }
-        let flags = Thread.current.threadDictionary
-        if flags[w3BusyKey] != nil { return nil }
-        flags[w3BusyKey] = true
-        defer { flags.removeObject(forKey: w3BusyKey) }
-        var b = frontal(shape, pose: pose, back: back)
+        var b = frontal(shape, pose: pose, back: back, custom: false)
         w3FrontFeatures(&b, shape, pose: pose, back: back)
         return b
     }
