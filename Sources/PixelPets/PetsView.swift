@@ -150,6 +150,12 @@ final class PetsView: MTKView {
     private var press: Press?
     private var feedKeyDown = false
 
+    /// Forgets keys held when focus was lost, so F can't get stuck "down".
+    func resetKeys() {
+        feedKeyDown = false
+        press = nil
+    }
+
     init(frame: CGRect, app: AppDelegate, renderer: PetsRenderer) {
         self.app = app
         self.renderer = renderer
@@ -291,7 +297,7 @@ final class PetsView: MTKView {
             app.playUI.rightClick(grid: p, hits: lastFrame.hits)
             return
         }
-        if feedKeyDown || event.modifierFlags.contains(.option) {
+        if feedKeyDown {
             app.world.dropPellet(x: worldX(p))
             return
         }
@@ -305,6 +311,8 @@ final class PetsView: MTKView {
             app.openLoot(id: id)
         case .pet:
             press = Press(target: hit.target, box: hit, start: p, lastX: p.x)
+        case .pellet:
+            break
         }
     }
 

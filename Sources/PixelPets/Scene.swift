@@ -3,7 +3,7 @@ import Foundation
 /// Something clickable in play mode, in grid pixels.
 struct HitBox {
     enum Target: Equatable {
-        case pet(UUID), egg(UUID), monster, loot(UUID)
+        case pet(UUID), egg(UUID), monster, loot(UUID), pellet(UUID)
     }
 
     var target: Target
@@ -108,11 +108,15 @@ enum SceneBuilder {
 
         for pellet in world.pellets {
             var item = SceneItem()
-            item.position = SIMD2(gx(pellet.x), groundY)
+            let x = gx(pellet.x)
+            // Food drops in from where it was placed, with a little bounce.
+            let t = Float(pellet.age)
+            let drop: Float = t < 0.3 ? 60 * (1 - t / 0.3) * (1 - t / 0.3) : t < 0.5 ? 6 * sin((t - 0.3) / 0.2 * .pi) : 0
+            item.position = SIMD2(x, groundY + drop)
             item.tile = atlas.tile(.pellet)
-            item.primary = PetPalette.rgba(0xC77B3A)
-            item.secondary = PetPalette.rgba(0xF2C288)
-            entries.append((item, nil, 1))
+            item.shadow = 6
+            let hit = HitBox(target: .pellet(pellet.id), minX: x - 8, minY: groundY, maxX: x + 8, maxY: groundY + 16)
+            entries.append((item, hit, 1))
         }
 
         for pet in world.pets {

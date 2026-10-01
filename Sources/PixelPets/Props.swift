@@ -389,9 +389,13 @@ enum PropArt {
         return Rig.render(parts, decals: decals, size: 64, scale: 2)
     }
 
+    /// Food: a little red apple with a leaf, so it reads as food at a glance.
     static func pellet() -> PixelSprite {
-        Rig.render([Part(.ellipse(c: V2(16, 3.2), r: V2(3.2, 2.4), angle: 0), .body, z: 0),
-                    Part(.ellipse(c: V2(15.2, 4), r: V2(1, 0.7), angle: 0), .secondary, z: 0.1, innerOutline: false)],
+        Rig.render([Part(.ellipse(c: V2(16, 4.6), r: V2(4.2, 3.8), angle: 0), .red, z: 0, group: 0),
+                    Part(.ellipse(c: V2(14.6, 5.8), r: V2(1, 1.2), angle: 0.3), .white, z: 0.1, group: 0, innerOutline: false,
+                         fixedTone: .light),
+                    Part(.capsule(a: V2(16, 8), b: V2(16.6, 10.2), ra: 0.45, rb: 0.4), .wood, z: 0.2, group: 1),
+                    Part(.ellipse(c: V2(18, 9.6), r: V2(1.7, 0.8), angle: 0.4), .green, z: 0.3, group: 2)],
                    size: 64, scale: 2)
     }
 

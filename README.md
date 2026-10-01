@@ -20,7 +20,7 @@ The pets live under your desktop icons. To interact with them, press **⌥⌘P**
 | Pet | Click a pet. Hearts pop out. |
 | Rub | Hold the button and wiggle side to side over a pet. Counts as three pets. |
 | Pet an egg | Click it. Takes a minute off the hatch time, up to five. |
-| Feed | Hold **F** (or ⌥) and click the ground. A hungry pet walks over. |
+| Feed | Hold **F** and click the ground. A hungry pet walks over. |
 | Pick up | Press on a pet and drag up or away. Brave pets like it; Timid ones don't. |
 | Throw into a fight | Drop a pet onto a monster. Its first hit does double damage. |
 | Hit a monster | Click it. |

@@ -242,6 +242,12 @@ final class PlayUI {
                 let r = UIRect(x: top.x - 2, y: top.y - 2, w: max(1, right.x - top.x + 4), h: max(1, right.y - top.y + 4))
                 for x in r.x..<(r.x + r.w) where x % 2 == 0 { canvas.put(x, r.y, PlayUI.white); canvas.put(x, r.y + r.h - 1, PlayUI.white) }
                 for y in r.y..<(r.y + r.h) where y % 2 == 0 { canvas.put(r.x, y, PlayUI.white); canvas.put(r.x + r.w - 1, y, PlayUI.white) }
+            } else if let (label, ink) = PlayUI.label(for: hit.target, in: world) {
+                let lw = PixelFont.width(label) + 8
+                let left = min(max(2, (top.x + right.x) / 2 - lw / 2), canvas.width - lw - 2)
+                let tagY = min(max(20, top.y - 18), canvas.height - 50)
+                canvas.panel(UIRect(x: left, y: tagY, w: lw, h: 13))
+                canvas.text(label, left + 4, tagY + 3, ink)
             } else if case .pet(let id) = hit.target, let pet = world.pets.first(where: { $0.id == id }), pinnedPet != id {
                 let label = "\(pet.name)  " + String(repeating: "★", count: pet.looks.rarity.rawValue + 1)
                 let lw = PixelFont.width(label) + 8
@@ -435,6 +441,25 @@ final class PlayUI {
             let tw = PixelFont.width(t.text)
             let x = min(max(2, t.x - tw / 2), canvas.width - tw - 2)
             canvas.text(t.text, x, t.y - 30 - rise, t.ink)
+        }
+    }
+
+    /// What to call things on the ground when hovered. Pets get their own name tag.
+    static func label(for target: HitBox.Target, in world: World) -> (String, UInt8)? {
+        switch target {
+        case .pet:
+            return nil
+        case .pellet:
+            return ("FOOD", PlayUI.white)
+        case .egg(let id):
+            guard let egg = world.eggs.first(where: { $0.id == id }) else { return nil }
+            return ("EGG: HATCHES IN \(Int(ceil(egg.remaining / 60))) MIN", Ink.make(.gold, .light))
+        case .loot(let id):
+            guard let loot = world.loot.first(where: { $0.id == id }) else { return nil }
+            return (loot.kind == .dailyChest ? "DAILY CHEST: CLICK TO OPEN" : "LOOT: CLICK TO OPEN", Ink.make(.gold, .light))
+        case .monster:
+            guard let m = world.monster else { return nil }
+            return ("\(m.kind.rawValue.uppercased()): CLICK TO HIT", Ink.make(.red, .light))
         }
     }
 

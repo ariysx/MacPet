@@ -64,7 +64,8 @@ Repainted after the reference backgrounds: hue-shifted ramps (cool shadows, warm
 - **Picky pets** eat when hunger is 50 or less, and only fetch food within 120 px unless they are below 30.
 - **Night sleep** lasts until 07:00. Full energy only ends naps.
 - **Pick up versus rub:** wiggling over the pet with the button held is a rub. Dragging up more than 3 px, or out of the pet's box, picks it up.
-- **Feeding:** ⌥-click works as well as F-click.
+- **Feeding:** hold F and click the ground. Food is an apple that drops in with a bounce; the F key resets when the window loses focus so it cannot stick. (⌥-click feeding was removed: it was easy to trigger by accident.)
+- **Hover labels:** in play mode, hovering food, eggs, chests, loot and monsters names them.
 - **Dragging a pet out of a fight** marks it as retreated, so it does not run straight back in.
 - **Full neglect** kills in 47 to 51 h depending on traits (Greedy + Cuddly is the fastest), which is a little under the spec's "2 to 3 days" at the extreme.
 - **Repository layout:** the app lives at the repository root rather than in `pixel-pets/`.

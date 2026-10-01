@@ -29,8 +29,14 @@ final class WallpaperWindow: NSWindow {
         return window
     }
 
+    override func resignKey() {
+        super.resignKey()
+        petsView?.resetKeys()
+    }
+
     func setPlayMode(_ on: Bool) {
         playMode = on
+        petsView?.resetKeys()
         if on {
             // Just below normal windows: above the desktop icons and widgets (macOS 14+ puts
             // widgets above the icon level), but under every app window.
