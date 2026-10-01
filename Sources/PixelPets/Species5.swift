@@ -104,10 +104,10 @@ extension SpeciesRig {
         (V2(-0.9, 2.6), V2(0.5, 4.3), 0.55, 0.45), (V2(-0.4, 1.3), V2(0.9, 2.1), 0.5, 0.45),
     ]
     private static let w5StagAntler: W5Branches = [
-        (V2(0, 0), V2(-0.7, 2.8), 0.8, 0.65), (V2(-0.7, 2.8), V2(-1.0, 5.6), 0.65, 0.55),
-        (V2(-1.0, 5.6), V2(-2.6, 7.6), 0.55, 0.45), (V2(-1.0, 5.6), V2(0.6, 7.8), 0.5, 0.45),
-        (V2(-0.3, 1.2), V2(1.7, 2.5), 0.55, 0.45), (V2(-0.9, 3.8), V2(1.2, 5.0), 0.5, 0.45),
-        (V2(-0.9, 4.2), V2(-3.2, 5.0), 0.5, 0.45), (V2(-3.2, 5.0), V2(-4.0, 6.6), 0.45, 0.45),
+        (V2(0, 0), V2(-0.7, 2.8), 1.0, 0.85), (V2(-0.7, 2.8), V2(-1.0, 5.6), 0.85, 0.75),
+        (V2(-1.0, 5.6), V2(-2.8, 7.8), 0.75, 0.6), (V2(-1.0, 5.6), V2(0.8, 8.0), 0.7, 0.6),
+        (V2(-0.3, 1.2), V2(1.9, 2.6), 0.75, 0.6), (V2(-0.9, 3.8), V2(1.4, 5.1), 0.7, 0.6),
+        (V2(-0.9, 4.2), V2(-3.2, 5.0), 0.7, 0.65), (V2(-3.2, 5.0), V2(-4.2, 6.8), 0.65, 0.6),
     ]
 
     private static func w5Antler(_ branches: W5Branches, root: V2, scale k: Double, lean: Double, flip: Double = 1,
@@ -187,9 +187,9 @@ extension SpeciesRig {
         }
         // Little antlers between the ears.
         let lean = b.headAngle - 0.1 + pose.lying * 0.3
-        b.parts += w5Antler(w5HareAntler, root: b.onHead(V2(-0.3, 0.85)), scale: 1, lean: lean + 0.15, ramp: .wood, z: 0.85,
+        b.parts += w5Antler(w5HareAntler, root: b.onHead(V2(-0.3, 0.85)), scale: 1.3, lean: lean + 0.15, ramp: .wood, z: 0.85,
                             group: 41, bias: 1)
-        b.parts += w5Antler(w5HareAntler, root: b.onHead(V2(0.15, 0.88)), scale: 1, lean: lean, ramp: .wood, z: 1.25, group: 40)
+        b.parts += w5Antler(w5HareAntler, root: b.onHead(V2(0.15, 0.88)), scale: 1.3, lean: lean, ramp: .wood, z: 1.25, group: 40)
         b.topOverride = b.onHead(V2(-0.1, 1.0))
         return b
     }
@@ -240,13 +240,8 @@ extension SpeciesRig {
         }
         mane += [bottom + V2(2, -1), b.onHead(V2(-0.9, -0.3))]
         b.parts.append(Part(.polygon(mane), .secondary, z: 0.7, group: 7))
-        // A tuft at the forehead and a little beard.
+        // A tuft at the forehead.
         b.parts.append(Part(headPolygon(b, [V2(-0.1, 0.8), V2(0.75, 0.75), V2(-0.4, 1.35)]), .secondary, z: 1.3, group: 7))
-        b.parts.append(Part(headPolygon(b, [V2(0.3, -0.75), V2(1.1, -0.85), V2(0.2, -1.8)]), .secondary, z: 1.05, group: 7))
-        // Whiskers trailing back.
-        let whiskerRoot = b.onHead(V2(1.35, -0.55))
-        let whisker = w5Curve(from: whiskerRoot, angle: 3.6 + sin(2 * .pi * pose.t) * 0.1, curl: 0.35, steps: 3, step: 1.6)
-        b.parts.append(Part(w5Ribbon(whisker, [0.45, 0.45, 0.4, 0.35]), .gold, z: 1.35, group: 43))
         // Antler-horns, swept back.
         let lean = b.headAngle + 0.35
         b.parts += w5Antler(w5QilinHorn, root: b.onHead(V2(-0.45, 0.8)), scale: 1, lean: lean + 0.15, ramp: .gold, z: 0.85,
@@ -258,7 +253,7 @@ extension SpeciesRig {
         for part in b.parts where part.role == .limb {
             if case let .capsule(_, f, _, _) = part.shape {
                 let flicker = sin(2 * .pi * (pose.t * 2) + Double(k) * 1.7) * 0.6
-                b.parts += w5Flame(f + V2(-0.7, 1.1), dir: 2.2, length: 3, width: 0.8, flicker: flicker, outer: .blue,
+                b.parts += w5Flame(f + V2(-0.9, 1.8), dir: 2.0, length: 3.8, width: 1.0, flicker: flicker, outer: .blue,
                                    inner: .white, z: part.z + 0.02, group: 10 + k)
                 k += 1
             }
@@ -340,14 +335,14 @@ extension SpeciesRig {
         }
         // Wings fold up over the back and flutter.
         let flutter = sin(2 * .pi * pose.t) * 0.06
-        let wingAngle = q.angle + 0.3 - pose.wing * 0.5 + pose.lying * 0.45 + flutter
+        let wingAngle = q.angle + 0.12 - pose.wing * 0.45 + pose.lying * 0.6 + flutter
         let root = q.bodyC + rotate(V2(-1, q.bodyR.y * 0.75), by: q.angle)
-        b.parts += w5MothWing(root + V2(-1.4, 0.6), angle: wingAngle + 0.28, z: -1.6, group: 8, bias: 1)
-        b.parts += w5MothWing(root, angle: wingAngle, z: 0.55, group: 7, bias: 0)
+        b.parts += w5MothWing(root + V2(-1.2, 0.4), angle: wingAngle + 0.45, scale: V2(1.1, 1.1), z: -1.6, group: 8, bias: 1)
+        b.parts += w5MothWing(root, angle: wingAngle, scale: V2(1.1, 1.1), z: 0.55, group: 7, bias: 0)
         // Fluffy white collar.
-        let neck = b.headC + V2(-1.6, -3)
-        for (k, (o, r)) in [(V2(-2.4, 1.4), 1.9), (V2(-1.0, -0.4), 2), (V2(0.8, -1.3), 1.9), (V2(2.4, -1.2), 1.6)].enumerated() {
-            b.parts.append(Part(.ellipse(c: neck + o, r: V2(r, r * 0.9), angle: 0), .white, z: 0.95 + Double(k) * 0.001, group: 10))
+        let neck = b.headC + V2(-0.6, -3.6)
+        for (k, (o, r)) in [(V2(-3.4, 0.6), 1.8), (V2(-1.8, -0.6), 1.9), (V2(0, -1.2), 1.8), (V2(1.8, -1.2), 1.5)].enumerated() {
+            b.parts.append(Part(.ellipse(c: neck + o, r: V2(r, r * 0.9), angle: 0), .white, z: 1.05 + Double(k) * 0.001, group: 10))
         }
         // Feathery antennae.
         let sway = pose.tail * 0.06 + pose.lying * 0.6
@@ -431,13 +426,13 @@ extension SpeciesRig {
         // Wings are its forelimbs: an arm with a clawed wrist, and fingers holding the membrane.
         let flap = pose.wing
         for near in [false, true] {
-            let shoulder = bodyC + rotate(V2(2.6 - (near ? 0 : 1.2), 2.6 + (near ? 0 : 0.6)), by: angle)
-            let wa = angle * 0.5 - (near ? 0 : 0.2) - flap * 0.15
-            let fy = 1 + flap * 0.22
-            let elbow = V2(-2.6, 3), wrist = V2(-0.4, 7.2)
-            let f1 = V2(-4.4, 9.4), f2 = V2(-8.4, 7), f3 = V2(-9.6, 2.6)
-            let membrane = w5Local(shoulder, wa, [V2(0.4, 0), wrist, f1, V2(-5.4, 7.4), f2, V2(-7.6, 4.4), f3, V2(-6.6, -1)],
-                                   scale: V2(1, fy))
+            let shoulder = bodyC + rotate(V2(2 - (near ? 0 : 1.4), 3.2 + (near ? 0 : 1)), by: angle)
+            let wa = angle * 0.5 - (near ? 0 : 0.22) - flap * 0.15
+            let fy = 1 + flap * 0.18 - pose.lying * 0.2
+            let elbow = V2(-2.2, 3.4), wrist = V2(0.2, 7.6)
+            let f1 = V2(-3.2, 11), f2 = V2(-7.6, 9.6), f3 = V2(-9.8, 5.2)
+            let membrane = w5Local(shoulder, wa, [V2(0.6, 0), wrist, f1, V2(-4.6, 8.4), f2, V2(-7.6, 6.4), f3, V2(-6.6, 3.4),
+                                                  V2(-3.2, 1.8)], scale: V2(1, fy))
             let z = near ? 0.6 : -1.5
             let g = near ? 7 : 8, bias = near ? 0 : 1
             b.parts.append(Part(.polygon(membrane), .secondary, z: z, group: g, toneBias: bias))
@@ -451,8 +446,8 @@ extension SpeciesRig {
         }
         // Long tail ending in a spade.
         let base = bodyC + rotate(V2(-bodyR.x * 0.85, -0.4), by: angle)
-        let tailParts = tail(from: base, angle: 3.55 + pose.tail * 0.2 - pose.lying * 0.3 - pose.dangle * 0.6, curl: -0.42,
-                             segments: 4, length: 2.5, radius: (2, 0.7), ramp: .body, z: -1)
+        let tailParts = tail(from: base, angle: 3.45 + pose.tail * 0.2 - pose.lying * 0.3 - pose.dangle * 0.6, curl: -0.4,
+                             segments: 4, length: 2.2, radius: (2, 0.7), ramp: .body, z: -1)
         b.parts += tailParts
         if case let .capsule(a, tip, _, _) = tailParts.last!.shape {
             let d = (tip - a) / max(0.001, ((tip - a).x * (tip - a).x + (tip - a).y * (tip - a).y).squareRoot())
@@ -474,67 +469,75 @@ extension SpeciesRig {
         let squash = pose.squash
         let legLen = 3.4 * (1 - pose.lying) * (1 + 0.3 * pose.dangle)
         let angle = pose.lean + pose.sway
-        let bodyR = V2(5.2 / squash.squareRoot(), 5.6 * squash)
-        let bodyC = V2(17 + pose.lunge, ground + legLen + bodyR.y * 0.8 + pose.bob + pose.lift)
-        b.parts.append(Part(.ellipse(c: bodyC, r: bodyR, angle: angle - 0.35), .body, z: 0, group: 0, patterned: true, role: .torso))
-        b.parts.append(Part(.ellipse(c: bodyC + rotate(V2(2, -0.4), by: angle), r: V2(3, 4.4), angle: angle - 0.35), .gold, z: 0.1,
+        let bodyR = V2(4.8 / squash.squareRoot(), 5.4 * squash)
+        let bodyC = V2(17.5 + pose.lunge, ground + legLen + bodyR.y * 0.8 + pose.bob + pose.lift * 0.75)
+        b.parts.append(Part(.ellipse(c: bodyC, r: bodyR, angle: angle - 0.45), .body, z: 0, group: 0, patterned: true, role: .torso))
+        b.parts.append(Part(.ellipse(c: bodyC + rotate(V2(2, 0), by: angle), r: V2(2.6, 4.4), angle: angle - 0.45), .gold, z: 0.1,
                             group: 0))
-        // Long proud neck and head.
-        let headC = bodyC + rotate(V2(3.2, 7.4), by: angle) + V2(pose.headDip * 0.6, -pose.headDip - pose.lying * 3)
+        // A long, proud neck.
+        let headC = bodyC + rotate(V2(3.8, 8.6), by: angle) + V2(pose.headDip * 0.8, -pose.headDip * 1.4 - pose.lying * 3.5)
         b.headC = headC
-        b.headR = 3.9
+        b.headR = 3.6
         b.headAngle = angle * 0.5 + pose.headTilt
-        b.parts.append(Part(.capsule(a: bodyC + rotate(V2(1.4, 2.8), by: angle), b: headC + V2(-0.6, -1.6), ra: 2.8, rb: 2.1), .body,
+        b.parts.append(Part(.capsule(a: bodyC + rotate(V2(1.6, 2.6), by: angle), b: headC + V2(-0.4, -1.4), ra: 2.5, rb: 1.8), .body,
                             z: 0.5, group: 1, patterned: true))
-        b.parts.append(Part(.ellipse(c: headC, r: V2(4, 3.9), angle: b.headAngle), .body, z: 1, group: 1, patterned: true, role: .head))
-        // Red mark under the eye.
-        b.parts.append(Part(.capsule(a: b.onHead(V2(0.45, -0.25)), b: b.onHead(V2(0.05, -0.75)), ra: 0.6, rb: 0.35), .red, z: 1.05,
+        b.parts.append(Part(.capsule(a: bodyC + rotate(V2(2.6, 2.4), by: angle), b: headC + V2(0.6, -2), ra: 1.4, rb: 1), .gold,
+                            z: 0.51, group: 1, innerOutline: false))
+        b.parts.append(Part(.ellipse(c: headC, r: V2(3.75, 3.6), angle: b.headAngle), .body, z: 1, group: 1, patterned: true,
+                            role: .head))
+        // Red mark sweeping back from the eye.
+        b.parts.append(Part(.capsule(a: b.onHead(V2(0.2, -0.05)), b: b.onHead(V2(-0.75, 0.25)), ra: 0.55, rb: 0.3), .red, z: 1.05,
                             group: 1, innerOutline: false))
         // Hooked golden beak.
         let open = pose.mouth == .open ? 0.4 : 0
-        b.parts.append(Part(headPolygon(b, [V2(0.7, 0.3), V2(1.55, 0.1), V2(1.85, -0.45), V2(1.5, -0.3), V2(0.75, -0.3)]), .gold,
+        b.parts.append(Part(headPolygon(b, [V2(0.7, 0.3), V2(1.55, 0.1), V2(1.9, -0.5), V2(1.5, -0.32), V2(0.75, -0.3)]), .gold,
                             z: 1.3, group: 42))
         b.parts.append(Part(headPolygon(b, [V2(0.75, -0.3), V2(1.35, -0.42 - open), V2(0.8, -0.6)]), .gold, z: 1.29, group: 42,
                             toneBias: 1))
-        // Flame crest.
+        // Flame crest streaming back.
         let flick = 2 * .pi * pose.t * 2
-        for (k, (dir, len)) in [(1.75, 5.0), (2.2, 6.2), (2.65, 5.2)].enumerated() {
-            b.parts += w5Flame(b.onHead(V2(-0.25 - Double(k) * 0.25, 0.75 - Double(k) * 0.15)), dir: dir + b.headAngle - pose.lying * 0.4,
-                               length: len, width: 1.15, flicker: sin(flick + Double(k) * 2) * 0.7, z: 0.9 - Double(k) * 0.01,
+        for (k, (dir, len)) in [(1.9, 4.6), (2.35, 6.0), (2.8, 5.0)].enumerated() {
+            b.parts += w5Flame(b.onHead(V2(-0.2 - Double(k) * 0.3, 0.75 - Double(k) * 0.2)), dir: dir + b.headAngle - pose.lying * 0.3,
+                               length: len, width: 1.05, flicker: sin(flick + Double(k) * 2) * 0.7, z: 0.9 - Double(k) * 0.01,
                                group: 44 + k)
         }
-        // Long trailing tail plumes of red and gold.
-        let rump = bodyC + rotate(V2(-3.8, -1.4), by: angle)
-        for (k, (start, curl)) in [(2.85, -0.1), (3.3, -0.12), (3.75, -0.22)].enumerated() {
-            let a = start + pose.tail * 0.12 + pose.dangle * 0.7 - pose.lying * 0.35 + angle
-            let spine = w5Curve(from: rump, angle: a, curl: curl + sin(2 * .pi * pose.t + Double(k)) * 0.03, steps: 6, step: 1.75)
+        // Long trailing tail plumes of red and gold, each ending in a golden eye.
+        let rump = bodyC + rotate(V2(-2.6, -3), by: angle)
+        for (k, (start, curl, steps)) in [(2.6, 0.1, 6), (3.05, 0.02, 7), (3.45, -0.12, 6)].enumerated() {
+            let a = start + pose.tail * 0.1 + pose.dangle * 0.8 - pose.lying * 0.3 + angle
+            let wave = sin(2 * .pi * pose.t + Double(k)) * 0.03
+            let spine = w5Curve(from: rump, angle: a, curl: curl + wave, steps: steps, step: 1.9)
             let z = -1 - Double(k) * 0.02
-            b.parts.append(Part(w5Ribbon(spine, [1.0, 1.4, 1.5, 1.35, 1.1, 0.8, 0.3]), .red, z: z, group: 10 + k))
-            b.parts.append(Part(w5Ribbon(spine, [0.3, 0.55, 0.65, 0.6, 0.5, 0.35, 0.1]), .gold, z: z + 0.01, group: 10 + k,
+            b.parts.append(Part(w5Ribbon(spine, [0.8, 1.0, 1.1, 1.1, 1.0, 0.8, 0.4]), .red, z: z, group: 10 + k))
+            b.parts.append(Part(w5Ribbon(spine, [0.2, 0.4, 0.45, 0.45, 0.4, 0.3, 0.1]), .gold, z: z + 0.01, group: 10 + k,
                                 innerOutline: false, fixedTone: .light))
+            let eye = spine[steps - 1]
+            b.parts.append(Part(.ellipse(c: eye, r: V2(1.25, 1.25), angle: 0), .gold, z: z + 0.02, group: 10 + k, fixedTone: .light))
+            b.parts.append(Part(.ellipse(c: eye, r: V2(0.6, 0.6), angle: 0), .red, z: z + 0.03, group: 10 + k, innerOutline: false,
+                                fixedTone: .base))
         }
-        // Wing with flame-tipped flight feathers.
-        let shoulder = bodyC + rotate(V2(0.4, 2), by: angle)
-        let wa = angle - 0.1 - pose.wing * 0.55 + pose.lying * 0.1
-        let wing = [V2(1.6, 0.4), V2(0, 2.4), V2(-4, 2.6), V2(-8.4, 0.4), V2(-9.6, -1.6), V2(-6.6, -2.4), V2(-2.8, -2.6), V2(0, -1.4)]
-        let coverts = [V2(1.6, 0.4), V2(0, 2.4), V2(-4, 2.6), V2(-5.4, 0.8), V2(-1.6, -0.6)]
-        for (k, (x, y, len)) in [(-8.6, -1.2, 4.2), (-6.4, -2.0, 3.6), (-4.0, -2.3, 3.0)].enumerated() {
+        // Wing folded along the side, flight feathers turning to flame.
+        let shoulder = bodyC + rotate(V2(0.6, 2.4), by: angle)
+        let wa = angle + 0.15 - pose.wing * 0.6 + pose.lying * 0.1
+        let wing = [V2(1.4, 0.4), V2(0, 2.2), V2(-3.6, 2.2), V2(-7.4, 0.2), V2(-6, -1.6), V2(-2.6, -2.4), V2(0, -1.4)]
+        let coverts = [V2(1.4, 0.4), V2(0, 2.2), V2(-3.6, 2.2), V2(-4.4, 0.6), V2(-1.4, -0.6)]
+        for (k, (x, y, len)) in [(-7.0, 0.0, 4.6), (-5.6, -1.4, 3.8), (-3.6, -2.1, 3.0)].enumerated() {
             let at = w5Local(shoulder, wa, [V2(x, y)])[0]
-            b.parts += w5Flame(at, dir: wa + 3.75 - Double(k) * 0.15, length: len, width: 1.1,
+            b.parts += w5Flame(at, dir: wa + 3.5 - Double(k) * 0.25, length: len, width: 1,
                                flicker: sin(flick + Double(k) * 1.3) * 0.6, z: 0.55 - Double(k) * 0.001, group: 13 + k)
         }
         b.parts.append(Part(.polygon(w5Local(shoulder, wa, wing)), .body, z: 0.6, group: 6, patterned: true, role: .extremity))
         b.parts.append(Part(.polygon(w5Local(shoulder, wa, coverts)), .gold, z: 0.61, group: 6))
         // Legs with golden talons and feathered thighs.
         for near in [true, false] {
-            let hip = bodyC + rotate(V2(near ? 0.8 : -0.8, -bodyR.y * 0.7), by: angle)
+            let hip = bodyC + rotate(V2(near ? 0.6 : -0.8, -bodyR.y * 0.7), by: angle)
             let swing = pose.stride * (near ? 1 : -1)
-            var foot = V2(hip.x + swing * 1.8, ground + 0.6 + pose.lift)
+            var foot = V2(hip.x + swing * 1.8, ground + 0.6 + pose.lift * 0.75)
             if pose.dangle > 0 { foot = hip + V2(0.3, -legLen * 1.2 - 1) }
             if pose.lying > 0 { foot = hip + V2(1, -0.6) }
             let z = near ? 2.0 : -2.0
             let g = near ? 3 : 4, bias = near ? 0 : 1
-            b.parts.append(Part(.ellipse(c: hip + V2(0, 0.6), r: V2(2, 2.2), angle: 0.3), .body, z: z, group: g, patterned: true,
+            b.parts.append(Part(.ellipse(c: hip + V2(0, 0.6), r: V2(1.9, 2.1), angle: 0.3), .body, z: z, group: g, patterned: true,
                                 toneBias: bias, role: .limb))
             if legLen > 0.5 {
                 b.parts.append(Part(.capsule(a: hip, b: foot, ra: 0.75, rb: 0.6), .gold, z: z - 0.01, group: g, toneBias: bias,
@@ -543,7 +546,7 @@ extension SpeciesRig {
             b.parts.append(Part(.capsule(a: foot + V2(-0.6, 0), b: foot + V2(1.8, 0), ra: 0.65, rb: 0.5), .gold, z: z, group: g,
                                 toneBias: bias, innerOutline: false))
         }
-        b.parts += w5Motes(pose, around: bodyC + V2(-1, 6), spread: V2(9, 6), ramp: .red, core: .gold, rise: true)
+        b.parts += w5Motes(pose, around: bodyC + V2(-2, 8), spread: V2(8, 5), ramp: .red, core: .gold, count: 2, rise: true)
         b.eyeX = (0.3, 0.75)
         b.eyeY = 0.18
         b.mouth = V2(2, 2)
@@ -617,11 +620,7 @@ extension SpeciesRig {
         let r = V2(9 / squash.squareRoot(), 5.8 * squash)
         let c = V2(18.5 + pose.lunge, ground + r.y + float)
         // Puffy clouds it drifts on.
-        for (k, (x, rr)) in [(-6.5, 2.2), (-2.5, 2.8), (2, 2.4), (6, 1.9)].enumerated() {
-            let drift = sin(2 * .pi * pose.t + Double(k)) * 0.4
-            b.parts.append(Part(.ellipse(c: V2(c.x + x + drift, ground + 1.6 + (k % 2 == 0 ? 0 : 0.6)), r: V2(rr * 1.3, rr * 0.8),
-                                         angle: 0), .white, z: 3 + Double(k) * 0.01, group: 16))
-        }
+        b.parts += w5Clouds(pose, centre: c.x - 1, spread: 1)
         // Body tapering into the tail stock, and a fluke that sweeps as it swims.
         b.parts.append(Part(.ellipse(c: c, r: r, angle: angle), .body, z: 0, group: 0, patterned: true, role: .torso))
         let sweep = pose.stride * 1.4 + pose.tail * 0.6 - pose.dangle * 1.5
@@ -675,6 +674,17 @@ extension SpeciesRig {
         return b
     }
 
+    /// A little bank of puffy clouds on the ground.
+    private static func w5Clouds(_ pose: Pose, centre x: Double, spread: Double) -> [Part] {
+        let puffs: [(Double, Double, Double)] = [(-7.5, 1.6, 1.6), (-4.6, 2.4, 2.3), (-1.4, 2.9, 2.6), (2, 2.5, 2.3), (5, 1.9, 1.9),
+                                                 (7.4, 1.5, 1.4)]
+        return puffs.enumerated().map { k, puff in
+            let drift = sin(2 * .pi * pose.t + Double(k)) * 0.3
+            return Part(.ellipse(c: V2(x + puff.0 * spread + drift, ground + puff.1 - 0.4), r: V2(puff.2 * 1.15, puff.2 * 0.85), angle: 0),
+                        .white, z: 3 + Double(k % 2) * 0.01 - abs(puff.0) * 0.001, group: 16 + k % 2)
+        }
+    }
+
     static func w5WhaleFront(_ pose: Pose, back: Bool) -> Built {
         var b = Built()
         let squash = pose.squash
@@ -682,20 +692,15 @@ extension SpeciesRig {
         let r = V2(8.2 / squash.squareRoot(), 6.6 * squash)
         let c = V2(16, ground + r.y + float)
         let angle = pose.sway
-        for (k, x) in [-6.0, -2.2, 2.2, 6.0].enumerated() {
-            let drift = sin(2 * .pi * pose.t + Double(k)) * 0.4
-            b.parts.append(Part(.ellipse(c: V2(c.x + x + drift, ground + 1.6 + (k % 3 == 0 ? 0 : 0.7)), r: V2(3, 1.9), angle: 0),
-                                .white, z: 3 + Double(k) * 0.01, group: 16))
-        }
+        b.parts += w5Clouds(pose, centre: c.x, spread: 0.85)
         b.parts.append(Part(.ellipse(c: c, r: r, angle: angle), .body, z: 0, group: 0, patterned: true, role: .torso))
-        // The fluke: peeking over the back from the front, in full view from behind.
         let sweep = pose.tail * 0.8 - pose.dangle
-        let flukeC = c + V2(0, back ? r.y * 0.35 : r.y * 0.62) + V2(0, sweep)
-        let k = back ? 1.15 : 0.9
-        b.parts.append(Part(.polygon([V2(-0.6, -1.4), V2(-4, 0.4), V2(-7.6, 3.2), V2(-6.6, 4.6), V2(-3, 3), V2(0, 1.8), V2(3, 3),
-                                      V2(6.6, 4.6), V2(7.6, 3.2), V2(4, 0.4), V2(0.6, -1.4)].map { flukeC + $0 * k }),
-                            .body, z: back ? 1.6 : -1, group: 5, patterned: true, role: .extremity))
         if back {
+            // The tail stock and fluke, in full view from behind.
+            let flukeC = c + V2(0, r.y * 0.35 + sweep)
+            let fluke = [V2(-0.6, -1.4), V2(-4, 0.4), V2(-7.6, 3.2), V2(-6.6, 4.6), V2(-3, 3), V2(0, 1.8), V2(3, 3), V2(6.6, 4.6),
+                         V2(7.6, 3.2), V2(4, 0.4), V2(0.6, -1.4)]
+            b.parts.append(Part(.polygon(fluke.map { flukeC + $0 * 1.15 }), .body, z: 1.6, group: 5, patterned: true, role: .extremity))
             b.parts.append(Part(.capsule(a: c, b: flukeC, ra: 3.6, rb: 1.6), .body, z: 1.5, group: 5, patterned: true))
         } else {
             let belly = c + V2(0, -r.y * 0.42)
@@ -734,11 +739,11 @@ extension SpeciesRig {
         Part(w5Ribbon(pts, pts.indices.map { i in i == pts.count - 1 ? 0.15 : width }), ramp, z: z, group: group, fixedTone: .light)
     }
 
-    private static let w5StormWing = [V2(1.5, 0), V2(1.0, 3.5), V2(-1.5, 7.5), V2(-5.5, 10.2), V2(-8.6, 10.8), V2(-7.6, 9.4),
-                                      V2(-10.6, 9.2), V2(-9.2, 7.8), V2(-11.4, 6.8), V2(-9.6, 5.6), V2(-10.8, 4.2), V2(-8.4, 3.4),
-                                      V2(-6.4, 0.4), V2(-3, -2.4), V2(0, -1.8)]
-    private static let w5StormCoverts = [V2(1.5, 0), V2(1.0, 3.5), V2(-1.5, 7.5), V2(-4.6, 8.8), V2(-4.4, 4), V2(-1.4, -1.2)]
-    private static let w5StormBolt = [V2(-2.4, 8.4), V2(-4.8, 6.6), V2(-4.0, 6.0), V2(-7.0, 4.6), V2(-6.2, 4.0), V2(-9.6, 2.2)]
+    private static let w5StormWing = [V2(1.2, 0), V2(1.5, 4), V2(-0.5, 8.5), V2(-3.5, 11.5), V2(-4.4, 9.8), V2(-6.8, 11.2),
+                                      V2(-7.4, 9), V2(-10, 9.6), V2(-9.8, 7.4), V2(-12, 6.8), V2(-10.4, 5), V2(-8, 2.8),
+                                      V2(-4.6, 0.4), V2(-2, -1.6)]
+    private static let w5StormCoverts = [V2(1.2, 0), V2(1.5, 4), V2(-0.5, 8.5), V2(-3.2, 7.8), V2(-3.8, 3.4), V2(-2, -1.6)]
+    private static let w5StormBolt = [V2(-1.0, 8.2), V2(-4.4, 6.2), V2(-3.6, 5.4), V2(-7.4, 4.0), V2(-6.6, 3.2), V2(-9.2, 2.4)]
 
     static func w5Thunderbird(_ pose: Pose) -> Built {
         var b = Built()
@@ -775,16 +780,16 @@ extension SpeciesRig {
         // Great wings, half raised, each struck through with lightning.
         let flap = pose.wing
         for near in [false, true] {
-            let shoulder = bodyC + rotate(V2(-0.4 - (near ? 0 : 1.2), 2.8 + (near ? 0 : 1)), by: angle)
-            let wa = angle - flap * 0.3 - (near ? 0 : 0.3) + pose.lying * 0.3
-            let sc = V2(1, 1 + flap * 0.15 - pose.lying * 0.25)
+            let shoulder = bodyC + rotate(V2(-1.2 - (near ? 0 : 1.4), 2.4 + (near ? 0 : 0.8)), by: angle)
+            let wa = angle + 0.25 - flap * 0.3 - (near ? 0 : 0.28) + pose.lying * 0.5
+            let sc = V2(1, 1 + flap * 0.12 - pose.lying * 0.3)
             let z = near ? 0.6 : -1.5
             let g = near ? 7 : 8, bias = near ? 0 : 1
-            b.parts.append(Part(.polygon(w5Local(shoulder, wa, w5StormWing, scale: sc)), .body, z: z, group: g, patterned: true,
+            b.parts.append(Part(.polygon(w5Local(shoulder, wa, w5StormWing, scale: sc)), .secondary, z: z, group: g,
                                 toneBias: bias, role: .extremity))
-            b.parts.append(Part(.polygon(w5Local(shoulder, wa, w5StormCoverts, scale: sc)), .secondary, z: z + 0.01, group: g,
-                                toneBias: bias))
-            b.parts.append(w5Bolt(w5Local(shoulder, wa, w5StormBolt, scale: sc), width: 0.6, ramp: near ? .gold : .blue,
+            b.parts.append(Part(.polygon(w5Local(shoulder, wa, w5StormCoverts, scale: sc)), .body, z: z + 0.01, group: g,
+                                patterned: true, toneBias: bias))
+            b.parts.append(w5Bolt(w5Local(shoulder, wa, w5StormBolt, scale: sc), width: 0.75, ramp: near ? .gold : .blue,
                                   z: z + 0.02, group: g + 30))
         }
         // Fanned tail.
@@ -951,12 +956,13 @@ extension SpeciesRig {
     // MARK: Cerberus
 
     /// One of the extra heads: a hound's head with its own muzzle, ear and eye.
-    private static func w5HoundHead(_ c: V2, r: Double, angle: Double, z: Double, group: Int, bias: Int, pose: Pose) -> [Part] {
-        func at(_ v: V2) -> V2 { c + rotate(v * r, by: angle) }
+    private static func w5HoundHead(_ c: V2, r: Double, angle: Double, flip: Double = 1, z: Double, group: Int, bias: Int,
+                                    pose: Pose) -> [Part] {
+        func at(_ v: V2) -> V2 { c + rotate(V2(v.x * flip, v.y) * r, by: angle) }
         var parts: [Part] = []
         parts.append(Part(.ellipse(c: c, r: V2(r * 1.04, r), angle: angle), .body, z: z, group: group, patterned: true,
                           toneBias: bias, role: .head))
-        parts.append(Part(.ellipse(c: at(V2(0.85, -0.38)), r: V2(r * 0.62, r * 0.44), angle: angle), .secondary, z: z + 0.01,
+        parts.append(Part(.ellipse(c: at(V2(0.85, -0.38)), r: V2(r * 0.62, r * 0.44), angle: angle * flip), .secondary, z: z + 0.01,
                           group: group, toneBias: bias))
         parts.append(Part(.ellipse(c: at(V2(1.38, -0.22)), r: V2(0.75, 0.65), angle: 0), .dark, z: z + 0.02, group: group))
         parts.append(Part(.polygon([at(V2(-0.6, 0.5)), at(V2(0.05, 0.8)), at(V2(-0.55, 1.6))]), .body, z: z + 0.03, group: group + 5,
@@ -987,14 +993,14 @@ extension SpeciesRig {
         b.parts.append(Part(.ellipse(c: b.onHead(V2(1.6, -0.25)), r: V2(0.8, 0.7), angle: 0), .dark, z: 1.2, group: 1))
         // Two more heads, up and behind, each on its own neck, bobbing out of step.
         let neckRoot = q.bodyC + rotate(V2(4.4, 2.6), by: q.angle)
-        for (k, off) in [V2(-3.4, 3.6), V2(-6.4, 5.4)].enumerated() {
+        for (k, off) in [V2(-1.4, 6.2), V2(-6.6, 3.8)].enumerated() {
             let ph = 2 * .pi * pose.t + Double(k + 1) * 2.1
             let c = b.headC + off + V2(0, sin(ph) * 0.4 * (1 - pose.lying)) + V2(0, -pose.lying * Double(k + 1) * 0.8)
             let z = 0.8 - Double(k) * 0.15, g = 47 + k
-            let tilt = b.headAngle + 0.15 * Double(k + 1) + sin(ph) * 0.05
-            b.parts.append(Part(.capsule(a: neckRoot + V2(-Double(k) * 2, 0), b: c + V2(-0.6, -1.4), ra: 2.4, rb: 2), .body,
+            let tilt = (k == 0 ? b.headAngle + 0.12 : -0.15) + sin(ph) * 0.05
+            b.parts.append(Part(.capsule(a: neckRoot + V2(-Double(k) * 2, 0), b: c + V2(k == 0 ? -0.6 : 0.6, -1.4), ra: 2.4, rb: 2), .body,
                                 z: z - 0.01, group: g, patterned: true, toneBias: k))
-            b.parts += w5HoundHead(c, r: 3.8, angle: tilt, z: z, group: g, bias: k, pose: pose)
+            b.parts += w5HoundHead(c, r: 3.6, angle: tilt, flip: k == 0 ? 1 : -1, z: z, group: g, bias: k, pose: pose)
         }
         // Spiked collar where the necks meet the chest.
         let ca = q.bodyC + rotate(V2(4.6, 4.2), by: q.angle), cb = q.bodyC + rotate(V2(7.4, -0.6), by: q.angle)
@@ -1031,7 +1037,7 @@ extension SpeciesRig {
             let flop = pose.lying * 0.9 + pose.dangle * 0.5
             for s in sides {
                 let root = b.onHead(V2(s * 0.45, 0.7))
-                let tip = root + rotate(V2(0, 7.4), by: -s * (0.42 + flop))
+                let tip = root + rotate(V2(0, 6.4), by: -s * (0.5 + flop))
                 let earZ = back ? 0.5 : faceZ - 0.1
                 b.parts.append(Part(.capsule(a: root, b: tip, ra: 1.5, rb: 1.1), .body, z: earZ, group: 6, patterned: true,
                                     role: .extremity))
@@ -1041,25 +1047,20 @@ extension SpeciesRig {
                     b.parts.append(Part(.capsule(a: root + (tip - root) * 0.2, b: root + (tip - root) * 0.7, ra: 0.6, rb: 0.5), .pink,
                                         z: earZ + 0.01, group: 6, innerOutline: false))
                 }
-                b.parts += w5Antler(w5HareAntler, root: b.onHead(V2(s * 0.2, 0.88)), scale: 1, lean: -s * 0.1, flip: s,
+                b.parts += w5Antler(w5HareAntler, root: b.onHead(V2(s * 0.2, 0.88)), scale: 1.2, lean: -s * 0.35, flip: s,
                                     ramp: .wood, z: back ? 0.6 : faceZ + 0.2, group: s < 0 ? 40 : 41)
             }
         case .qilin:
             for s in sides {
-                b.parts += w5Antler(w5QilinHorn, root: b.onHead(V2(s * 0.4, 0.82)), scale: 1, lean: s * 0.15, flip: -s, ramp: .gold,
+                b.parts += w5Antler(w5QilinHorn, root: b.onHead(V2(s * 0.45, 0.78)), scale: 0.9, lean: -s * 0.35, flip: -s, ramp: .gold,
                                     z: back ? 0.6 : faceZ - 0.15, group: s < 0 ? 40 : 41)
-                if !back {
-                    let whisker = w5Curve(from: b.onHead(V2(s * 0.35, -0.5)), angle: s < 0 ? 3.5 : -0.36, curl: s * 0.4, steps: 3,
-                                          step: 1.5)
-                    b.parts.append(Part(w5Ribbon(whisker, [0.45, 0.45, 0.4, 0.35]), .gold, z: faceZ + 0.3, group: 43))
-                }
             }
             w5Hooves(&b, ramp: .gold)
             var k = 0
             for part in b.parts where part.role == .limb {
                 if case let .capsule(_, f, _, _) = part.shape {
                     let s: Double = f.x < 16 ? -1 : 1
-                    b.parts += w5Flame(f + V2(s * 1.2, 1), dir: .pi / 2 - s * 0.6, length: 3, width: 0.8,
+                    b.parts += w5Flame(f + V2(s * 1.3, 1.6), dir: .pi / 2 - s * 0.5, length: 3.6, width: 1.0,
                                        flicker: sin(flick + Double(k) * 1.7) * 0.6, outer: .blue, inner: .white, z: part.z + 0.02,
                                        group: 10 + k)
                     k += 1
@@ -1130,29 +1131,41 @@ extension SpeciesRig {
                                    group: 44 + k)
             }
             for s in sides {
-                // Tail plumes sweeping out on either side.
-                for (k, (a, curl)) in [(-0.55, 0.16), (-0.05, 0.22)].enumerated() {
-                    let start = s > 0 ? a : .pi - a
-                    let spine = w5Curve(from: c + V2(s * 1.5, -r.y * 0.3), angle: start + pose.tail * 0.1 * s,
-                                        curl: s * curl, steps: 5, step: 1.75)
+                // Tail plumes fanning out low behind, each ending in a golden eye.
+                for (k, (a, curl)) in [(-0.2, 0.16), (-0.7, 0.26)].enumerated() {
+                    let spine = w5Curve(from: c + V2(s * 1.2, -r.y * 0.35), angle: s > 0 ? a : .pi - a, curl: s * curl, steps: 5,
+                                        step: 1.8)
                     let z = (back ? 1.4 : -1.2) - Double(k) * 0.02
                     let g = 10 + k + (s < 0 ? 0 : 2)
-                    b.parts.append(Part(w5Ribbon(spine, [1.0, 1.4, 1.4, 1.1, 0.7, 0.25]), .red, z: z, group: g))
-                    b.parts.append(Part(w5Ribbon(spine, [0.3, 0.55, 0.6, 0.45, 0.3, 0.1]), .gold, z: z + 0.01, group: g,
+                    b.parts.append(Part(w5Ribbon(spine, [0.8, 1.0, 1.1, 1.0, 0.8, 0.4]), .red, z: z, group: g))
+                    b.parts.append(Part(w5Ribbon(spine, [0.2, 0.4, 0.45, 0.4, 0.3, 0.1]), .gold, z: z + 0.01, group: g,
                                         innerOutline: false, fixedTone: .light))
+                    b.parts.append(Part(.ellipse(c: spine[4], r: V2(1.25, 1.25), angle: 0), .gold, z: z + 0.02, group: g,
+                                        fixedTone: .light))
+                    b.parts.append(Part(.ellipse(c: spine[4], r: V2(0.6, 0.6), angle: 0), .red, z: z + 0.03, group: g,
+                                        innerOutline: false, fixedTone: .base))
                 }
-                // Flames licking from each wingtip.
-                let wc = c + V2(s * (r.x - 0.5), 0.5 + pose.wing), wa = s * (-0.3 - pose.wing * 0.6)
-                for (k, da) in [0.0, 0.5].enumerated() {
-                    b.parts += w5Flame(wc + rotate(V2(s * Double(k) * 1.2, -3.2), by: wa), dir: -.pi / 2 + s * (0.5 + da) + wa,
-                                       length: 3.4, width: 1, flicker: sin(flick + Double(k)) * 0.5, z: back ? 0.55 : 0.45,
-                                       group: 14 + k + (s < 0 ? 0 : 2))
+                // Wings held out low, their flight feathers turning to flame.
+                let root = c + V2(s * 3.4, r.y * 0.3)
+                let wa = s * (-0.45 + pose.wing * 0.9 - pose.lying * 0.3)
+                let wing = [V2(1.4, 0.4), V2(0, 2.2), V2(-3.6, 2.2), V2(-7.4, 0.2), V2(-6, -1.6), V2(-2.6, -2.4), V2(0, -1.4)]
+                let coverts = [V2(1.4, 0.4), V2(0, 2.2), V2(-3.6, 2.2), V2(-4.4, 0.6), V2(-1.4, -0.6)]
+                let z = back ? 0.6 : -0.4
+                let g = s < 0 ? 7 : 8
+                for (k, (x, y, len)) in [(-7.0, 0.0, 4.2), (-5.6, -1.4, 3.6), (-3.6, -2.1, 2.8)].enumerated() {
+                    let at = w5Local(root, wa, [V2(x, y)], flip: -s)[0]
+                    let d = rotate(V2(-s * cos(3.5 - Double(k) * 0.25), sin(3.5 - Double(k) * 0.25)), by: wa)
+                    b.parts += w5Flame(at, dir: atan2(d.y, d.x), length: len, width: 1, flicker: sin(flick + Double(k) * 1.3) * 0.6,
+                                       z: z - 0.05 - Double(k) * 0.001, group: 14 + k + (s < 0 ? 0 : 3))
                 }
+                b.parts.append(Part(.polygon(w5Local(root, wa, wing, flip: -s)), .body, z: z, group: g, patterned: true,
+                                    role: .extremity))
+                b.parts.append(Part(.polygon(w5Local(root, wa, coverts, flip: -s)), .gold, z: z + 0.01, group: g))
             }
             b.parts += w5Motes(pose, around: c + V2(0, 6), spread: V2(10, 6), ramp: .red, core: .gold, rise: true)
         case .spiritStag:
             for s in sides {
-                b.parts += w5Antler(w5StagAntler, root: b.onHead(V2(s * 0.4, 0.8)), scale: 0.85, lean: s * 0.12, flip: -s, ramp: .blue,
+                b.parts += w5Antler(w5StagAntler, root: b.onHead(V2(s * 0.45, 0.75)), scale: 0.85, lean: -s * 0.3, flip: -s, ramp: .blue,
                                     z: back ? 0.6 : faceZ - 0.15, group: s < 0 ? 40 : 41, glow: .light)
             }
             if !back {
@@ -1164,19 +1177,17 @@ extension SpeciesRig {
         case .thunderbird:
             let flap = pose.wing
             for s in sides {
-                let root = c + V2(s * 2.6, r.y * 0.3)
-                let wing = [V2(0, -1), V2(0.5, 3), V2(3, 6.5), V2(6.5, 8.5), V2(10, 9.5), V2(9, 8), V2(12, 7.2), V2(10.2, 6),
-                            V2(12.4, 4.6), V2(10.2, 3.6), V2(11.2, 1.8), V2(8.4, 1.2), V2(5, -1.5), V2(1.5, -3)]
-                let coverts = [V2(0, -1), V2(0.5, 3), V2(3, 6.5), V2(6, 8), V2(5.4, 3), V2(2, -2)]
-                let bolt = [V2(3.4, 6.4), V2(5.6, 4.4), V2(6.4, 5.2), V2(8.8, 2.8), V2(9.4, 3.6), V2(11.4, 0.6)]
-                let wa = s * (flap * 0.3 - pose.lying * 0.3)
-                let sc = V2(0.85, 0.85 + flap * 0.1)
+                let root = c + V2(s * 4.2, r.y * 0.35)
+                let wa = s * (0.3 + flap * 0.25 - pose.lying * 0.4)
+                let sc = V2(0.85, 0.8 + flap * 0.08)
                 let z = back ? 1.5 : -1.5
                 let g = s < 0 ? 7 : 8
-                b.parts.append(Part(.polygon(w5Local(root, wa, wing, flip: s, scale: sc)), .body, z: z, group: g, patterned: true,
+                b.parts.append(Part(.polygon(w5Local(root, wa, w5StormWing, flip: -s, scale: sc)), .secondary, z: z, group: g,
                                     role: .extremity))
-                b.parts.append(Part(.polygon(w5Local(root, wa, coverts, flip: s, scale: sc)), .secondary, z: z + 0.01, group: g))
-                b.parts.append(w5Bolt(w5Local(root, wa, bolt, flip: s, scale: sc), width: 0.55, ramp: .gold, z: z + 0.02, group: g + 30))
+                b.parts.append(Part(.polygon(w5Local(root, wa, w5StormCoverts, flip: -s, scale: sc)), .body, z: z + 0.01, group: g,
+                                    patterned: true))
+                b.parts.append(w5Bolt(w5Local(root, wa, w5StormBolt, flip: -s, scale: sc), width: 0.7, ramp: .gold, z: z + 0.02,
+                                      group: g + 30))
                 // Crest feathers flaring out on both sides.
                 let base = b.onHead(V2(s * 0.5, 0.75))
                 let tip = base + V2(s * 3.6, 3.4 + pose.tail * 0.3)
@@ -1293,7 +1304,7 @@ extension FrontProfile {
             p.ears = .none; p.snout = .muzzle(0.8); p.tail = .cotton
         case .qilin:
             p.bodyR = V2(5.6, 5.2); p.headR = 4.2; p.headY = 8.4; p.legLen = 6; p.legR = (1.6, 1.1); p.legGap = 2.4
-            p.ears = .side; p.snout = .muzzle(0.95); p.tail = .bushy; p.mane = true; p.neck = true
+            p.ears = .side; p.snout = .muzzle(0.95); p.tail = .bushy; p.neck = true
         case .mothkin:
             p.bodyR = V2(6, 5); p.headR = 5; p.headY = 5.4; p.legLen = 2.4; p.legR = (1.1, 0.9); p.legGap = 2.4
             p.ears = .none; p.snout = .none; p.tail = .none
@@ -1302,9 +1313,9 @@ extension FrontProfile {
             p.ears = .none; p.snout = .muzzle(1.1); p.tail = .spade; p.batWings = true; p.neck = true
         case .phoenix:
             p.body = .biped; p.bodyR = V2(5.6, 5.6); p.headR = 4.2; p.headY = 7.2; p.legLen = 3.4; p.legR = (0.7, 0.6)
-            p.legGap = 2.2; p.ears = .none; p.snout = .beak; p.tail = .none; p.wings = true; p.neck = true; p.chest = .gold
+            p.legGap = 2.2; p.ears = .none; p.snout = .beak; p.tail = .none; p.neck = true; p.chest = .gold
         case .spiritStag:
-            p.bodyR = V2(5.4, 4.9); p.headR = 4; p.headY = 8; p.legLen = 6; p.legR = (1.3, 0.95); p.legGap = 2.4
+            p.bodyR = V2(5.4, 4.9); p.headR = 4; p.headY = 7.2; p.legLen = 5.6; p.legR = (1.3, 0.95); p.legGap = 2.4
             p.ears = .side; p.snout = .muzzle(0.85); p.tail = .cotton; p.neck = true; p.chest = .white
         case .thunderbird:
             p.body = .biped; p.bodyR = V2(6, 6.2); p.headR = 4.4; p.headY = 7.4; p.legLen = 3.2; p.legR = (0.95, 0.8)
