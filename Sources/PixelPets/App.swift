@@ -49,6 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var renderer: PetsRenderer?
     private(set) var regions = PetSpriteRegions()
     let playUI = PlayUI()
+    /// Hit bursts currently on screen.
+    private(set) var effects: [SceneEffect] = []
     private(set) var dayPhase: Float = 0.5
     private(set) var backgroundTexture: MTLTexture?
     private var auroraTonight = false
@@ -157,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let events = world.events
         world.events.removeAll()
         for event in events { handle(event) }
+        showHits()
         syncSprites()
 
         if playMode && now - lastInput > 120 { setPlayMode(false) }
@@ -346,6 +349,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let status = RegisterEventHotKey(UInt32(kVK_ANSI_P), UInt32(cmdKey | optionKey), id,
                                          GetApplicationEventTarget(), 0, &hotKey)
         if status != noErr { petsLog("could not register ⌥⌘P (status \(status))") }
+    }
+
+    /// Turns the blows landed this tick into bursts and, in play mode, damage numbers.
+    private func showHits() {
+        let now = renderTime
+        effects.removeAll { now - $0.born > SceneEffect.duration }
+        let ground = windows.values.first { $0.petsView.isMain }?.petsView.groundY ?? 120
+        for hit in world.hits {
+            let x = Float(hit.x) * SceneBuilder.worldScale
+            let y = ground + Float(hit.height) * SceneBuilder.worldScale + 20
+            effects.append(SceneEffect(x: x, y: y, born: now))
+            if playMode {
+                playUI.toast("-\(Int(hit.damage.rounded()))", ink: hit.onMonster ? PlayUI.white : Ink.make(.red, .light),
+                             atGrid: SIMD2(x, y + 40))
+            }
+        }
+        world.hits.removeAll()
     }
 
     /// Opens a chest or picks up a bag, with the item reveal.

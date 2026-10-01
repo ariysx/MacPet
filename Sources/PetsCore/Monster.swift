@@ -1,29 +1,79 @@
 import Foundation
 
 enum MonsterKind: String, Codable, CaseIterable {
-    case slime, bat, ogre
+    case slime, shroomling, bat, wolf, wisp, ogre, golem
 
     var maxHealth: Double {
-        switch self { case .slime: return 30; case .bat: return 25; case .ogre: return 120 }
+        switch self {
+        case .slime: return 30
+        case .shroomling: return 35
+        case .bat: return 25
+        case .wolf: return 50
+        case .wisp: return 30
+        case .ogre: return 120
+        case .golem: return 160
+        }
     }
     var damage: Double {
-        switch self { case .slime: return 4; case .bat: return 6; case .ogre: return 12 }
+        switch self {
+        case .slime: return 4
+        case .shroomling: return 5
+        case .bat: return 6
+        case .wolf: return 8
+        case .wisp: return 7
+        case .ogre: return 12
+        case .golem: return 14
+        }
     }
     var hitInterval: Double {
-        switch self { case .slime: return 2.0; case .bat: return 1.5; case .ogre: return 2.5 }
+        switch self {
+        case .slime: return 2.0
+        case .shroomling: return 2.2
+        case .bat: return 1.5
+        case .wolf: return 1.6
+        case .wisp: return 1.8
+        case .ogre: return 2.5
+        case .golem: return 3.0
+        }
     }
-    /// Grid pixels per second.
+    /// Units per second.
     var speed: Double {
-        switch self { case .slime: return 6; case .bat: return 22; case .ogre: return 5 }
+        switch self {
+        case .slime: return 6
+        case .shroomling: return 7
+        case .bat: return 22
+        case .wolf: return 18
+        case .wisp: return 12
+        case .ogre: return 5
+        case .golem: return 4
+        }
     }
-    /// How close it has to be to hit a pet, in grid pixels.
-    var reach: Double { self == .ogre ? 14 : 10 }
+    /// Spawn chance out of 100.
+    var weight: Double {
+        switch self {
+        case .slime: return 30
+        case .shroomling: return 18
+        case .bat: return 18
+        case .wolf: return 14
+        case .wisp: return 10
+        case .ogre: return 6
+        case .golem: return 4
+        }
+    }
+    var isBig: Bool { self == .ogre || self == .golem }
+    var flies: Bool { self == .bat || self == .wisp }
+    /// How close it has to be to hit a pet.
+    var reach: Double { isBig ? 14 : 10 }
     /// Half the sprite's visible width, for hit testing and throwing pets in.
-    var halfWidth: Double { self == .ogre ? 12 : 7 }
+    var halfWidth: Double { isBig ? 12 : 7 }
 
     static func roll<R: RandomSource>(_ random: inout R) -> MonsterKind {
-        let r = random.nextDouble()
-        return r < 0.6 ? .slime : r < 0.9 ? .bat : .ogre
+        var r = random.nextDouble() * allCases.reduce(0) { $0 + $1.weight }
+        for kind in allCases {
+            r -= kind.weight
+            if r < 0 { return kind }
+        }
+        return .slime
     }
 }
 
@@ -54,6 +104,15 @@ struct Monster {
     }
 
     var exitX: Double { fromLeft ? -kind.halfWidth - 4 : World.width + kind.halfWidth + 4 }
+}
+
+/// One blow landing, for hit effects and damage numbers. Not saved.
+struct CombatHit: Equatable {
+    var x: Double
+    var height: Double
+    var damage: Double
+    /// True when the monster was hit; false when a pet was.
+    var onMonster: Bool
 }
 
 enum Combat {
@@ -150,6 +209,8 @@ extension World {
                 pets[i].thrownBonus = false
             }
             m.health -= damage
+            hits.append(CombatHit(x: (m.x + pets[i].x) / 2, height: 8, damage: damage, onMonster: true))
+            m.x += (m.x > pets[i].x ? 1 : -1) * 1.5 // a little knockback
             m.hurtFlash = 0.2
             m.sinceLastHit = 0
             pets[i].landedHit = true
@@ -181,8 +242,13 @@ extension World {
                 m.x += (dx < 0 ? -1 : 1) * min(abs(dx) - m.kind.reach + 0.5, m.kind.speed * dt)
             } else if m.hitCooldown <= 0 {
                 m.hitCooldown = m.kind.hitInterval
-                pets[target].health -= m.kind.damage * (pets[target].relic == .guardianShell ? 0.6 : 1)
+                let damage = m.kind.damage * (pets[target].relic == .guardianShell ? 0.6 : 1)
+                pets[target].health -= damage
                 pets[target].hurtFlash = 0.3
+                hits.append(CombatHit(x: pets[target].x, height: 10, damage: damage, onMonster: false))
+                // Knocked back: a hop away from the monster, then it comes back in.
+                pets[target].vx = (pets[target].x < m.x ? -1 : 1) * 70
+                pets[target].vy = 110
                 if pets[target].health <= 0 {
                     pets[target].health = 0
                     monster = m
@@ -197,6 +263,10 @@ extension World {
     }
 
     private mutating func updateFightRole(petIndex i: Int, monster m: Monster, dt: Double) {
+        // Retreating doesn't wait for a knocked-back pet to land.
+        if pets[i].health < Combat.retreatHealth && (pets[i].fight == .fighting || pets[i].fight == .charging) {
+            pets[i].fight = .retreated
+        }
         guard !pets[i].held, !pets[i].isFalling else { return }
         let distance = abs(pets[i].x - m.x)
 
@@ -254,6 +324,7 @@ extension World {
         guard var m = monster, m.phase == .attacking, playerHitCooldown <= 0 else { return false }
         playerHitCooldown = Combat.playerCooldown
         m.health -= Combat.playerDamage
+        hits.append(CombatHit(x: m.x, height: 10, damage: Combat.playerDamage, onMonster: true))
         m.hurtFlash = 0.2
         m.sinceLastHit = 0
         monster = m

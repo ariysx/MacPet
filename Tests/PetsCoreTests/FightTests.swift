@@ -179,10 +179,11 @@ final class FightTests: XCTestCase {
     func testSpawnWeights() {
         var random = SeededRandom(seed: 99)
         var counts: [MonsterKind: Int] = [:]
-        for _ in 0..<10_000 { counts[MonsterKind.roll(&random), default: 0] += 1 }
-        XCTAssertEqual(Double(counts[.slime]!) / 10_000, 0.6, accuracy: 0.03)
-        XCTAssertEqual(Double(counts[.bat]!) / 10_000, 0.3, accuracy: 0.03)
-        XCTAssertEqual(Double(counts[.ogre]!) / 10_000, 0.1, accuracy: 0.03)
+        for _ in 0..<20_000 { counts[MonsterKind.roll(&random), default: 0] += 1 }
+        let total = MonsterKind.allCases.reduce(0) { $0 + $1.weight }
+        for kind in MonsterKind.allCases {
+            XCTAssertEqual(Double(counts[kind] ?? 0) / 20_000, kind.weight / total, accuracy: 0.02, "\(kind)")
+        }
     }
 }
 
@@ -272,5 +273,23 @@ final class PhysicsTests: XCTestCase {
         world.run(seconds: 0.8, step: 1.0 / 30)
         XCTAssertGreaterThan(world[pet: brave]!.happiness, 50)
         XCTAssertLessThan(world[pet: scared]!.happiness, 50)
+    }
+}
+
+final class HitFeedbackTests: XCTestCase {
+    func testBlowsAreRecordedAndKnockPetsBack() {
+        var world = makeWorld()
+        let id = addPet(&world, x: 20)
+        world.spawnMonster(kind: .slime, fromLeft: true)
+        world.monster!.x = 26
+        world.monster!.hitCooldown = 0
+        world.tick(dt: 1.0 / 30)
+        XCTAssertTrue(world.hits.contains { !$0.onMonster })
+        XCTAssertTrue(world[pet: id]!.isFalling, "knocked back into a hop")
+        XCTAssertLessThan(world[pet: id]!.vx, 0, "away from the monster")
+        world.hits.removeAll()
+        world.playerHitMonster()
+        XCTAssertEqual(world.hits.last?.damage, Combat.playerDamage)
+        XCTAssertTrue(world.hits.last!.onMonster)
     }
 }

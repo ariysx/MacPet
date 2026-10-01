@@ -14,6 +14,14 @@ struct HitBox {
     }
 }
 
+/// A short-lived effect at a spot on the grid, such as a hit.
+struct SceneEffect {
+    var x: Float
+    var y: Float
+    var born: Double
+    static let duration = 0.32
+}
+
 struct SceneFrame {
     var items: [SceneItem] = []
     /// Front to back, for hit testing.
@@ -29,8 +37,16 @@ enum SceneBuilder {
     static func gx(_ x: Double) -> Float { Float(x) * worldScale }
 
     static func build(world: World, groundY: Float, time: Double, playMode: Bool,
-                      atlas: SpriteAtlas, regions: PetSpriteRegions) -> SceneFrame {
+                      atlas: SpriteAtlas, regions: PetSpriteRegions, effects: [SceneEffect] = []) -> SceneFrame {
         var entries: [(item: SceneItem, hit: HitBox?, priority: Int)] = []
+        for effect in effects {
+            let age = time - effect.born
+            guard age >= 0 && age < SceneEffect.duration else { continue }
+            var item = SceneItem()
+            item.position = SIMD2(effect.x, effect.y - 32)
+            item.tile = atlas.tile(.impact(min(PropArt.impactFrames - 1, Int(age / SceneEffect.duration * Double(PropArt.impactFrames)))))
+            entries.append((item, nil, 5))
+        }
         let clock = world.clock
 
         for grave in world.graves {
@@ -63,7 +79,14 @@ enum SceneBuilder {
         for loot in world.loot {
             var item = SceneItem()
             let x = gx(loot.x)
-            item.position = SIMD2(x, groundY)
+            // New loot falls in from above and bounces, so it's clearly a delivery.
+            var drop: Float = 0
+            if loot.age < 1.1 {
+                let t = Float(loot.age)
+                drop = t < 0.6 ? 160 * (1 - t / 0.6) * (1 - t / 0.6) : 14 * abs(sin((t - 0.6) / 0.5 * .pi)) * (1.1 - t) / 0.5
+            }
+            item.position = SIMD2(x, groundY + drop)
+            if loot.age < 2.5 && Int(time * 10) % 2 == 0 { item.icon = Int32(atlas.tile(.icon(.sparkle))) }
             switch loot.kind {
             case .dailyChest:
                 item.tile = atlas.tile(.chest)
@@ -71,7 +94,7 @@ enum SceneBuilder {
                 item.secondary = PetPalette.rgba(0xF2C14E)
             case .bag:
                 item.tile = atlas.tile(.bag)
-                item.primary = PetPalette.rgba(0xC9A26B)
+                item.primary = PetPalette.rgba(0xE8D3A6)
                 item.secondary = PetPalette.rgba(0xD9534F)
             }
             item.shadow = 18
@@ -108,33 +131,24 @@ enum SceneBuilder {
             let attacking = m.phase == .attacking && sinceHit >= 0 && sinceHit < Double(m.kind.attackFrames) / 10
             let frame = attacking ? min(m.kind.attackFrames - 1, Int(sinceHit * 10)) : Int(time * m.kind.moveFPS) % m.kind.moveFrames
             var y = groundY
-            if m.kind == .bat { y += 16 + 20 * Float(0.5 + 0.5 * sin(m.age * 2)) }
+            if m.kind.flies { y += 16 + 20 * Float(0.5 + 0.5 * sin(m.age * 2)) }
             item.position = SIMD2(x, y)
             item.tile = atlas.tile(.monster(m.kind, attack: attacking, frame))
-            item.tileSpan = m.kind == .ogre ? 2 : 1
-            switch m.kind {
-            case .slime:
-                item.primary = PetPalette.rgba(0x6CCB5F)
-                item.secondary = PetPalette.rgba(0xB8F0A8)
-            case .bat:
-                item.primary = PetPalette.rgba(0x5A4A78)
-                item.secondary = PetPalette.rgba(0xC9A8E8)
-            case .ogre:
-                item.primary = PetPalette.rgba(0x8C9A5B)
-                item.secondary = PetPalette.rgba(0xA0673A)
-            }
+            item.tileSpan = m.kind.isBig ? 2 : 1
+            item.primary = PetPalette.rgba(m.kind.colours.0)
+            item.secondary = PetPalette.rgba(m.kind.colours.1)
             var flags: SceneItem.Flags = []
             if m.facingLeft { flags.insert(.flipX) }
             if m.hurtFlash > 0 { flags.insert(.hurtFlash) }
             if m.phase == .attacking {
                 flags.insert(.monsterBar)
                 item.bars = SIMD4(Float(max(0, m.health / m.kind.maxHealth)), 0, 0, 0)
-                item.barLift = m.kind == .ogre ? 104 : m.kind == .bat ? 52 : 40
+                item.barLift = m.kind.isBig ? 104 : m.kind.flies ? 52 : 44
             }
             item.flags = flags.rawValue
-            item.shadow = m.kind == .ogre ? 32 : 18
+            item.shadow = m.kind.isBig ? 32 : 18
             let half = Float(m.kind.halfWidth) * worldScale
-            let height: Float = m.kind == .ogre ? 100 : 44
+            let height: Float = m.kind.isBig ? 100 : 44
             let hit = HitBox(target: .monster, minX: x - half, minY: y, maxX: x + half, maxY: y + height)
             entries.append((item, hit, 5))
         }

@@ -202,7 +202,8 @@ final class PetsView: MTKView {
         var items: [SceneItem] = []
         if isMain {
             lastFrame = SceneBuilder.build(world: app.world, groundY: groundY, time: app.renderTime,
-                                           playMode: app.playMode, atlas: renderer.atlas, regions: app.regions)
+                                           playMode: app.playMode, atlas: renderer.atlas, regions: app.regions,
+                                           effects: app.effects)
             items = lastFrame.items
         }
         let uniforms = SceneUniforms(resolution: grid,

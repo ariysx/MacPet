@@ -147,15 +147,25 @@ enum LootTable {
     /// Items from beating a monster. A Lucky Clover on a winner adds a roll and raises the floor.
     static func monsterLoot<R: RandomSource>(_ kind: MonsterKind, lucky: Bool, _ random: inout R) -> [Item] {
         var items: [Item] = []
+        let potions = Item.allCases.filter { $0.category == .potion }
+        let gear = Item.allCases.filter { $0.category != .potion }
         switch kind {
-        case .slime:
-            items.append(.roll(&random, from: Item.allCases.filter { $0.category == .potion }))
+        case .slime, .shroomling:
+            items.append(.roll(&random, from: potions))
             if random.chance(0.25) { items.append(.roll(&random)) }
-        case .bat:
+        case .bat, .wolf:
             items.append(.roll(&random))
-            items.append(.roll(&random, from: Item.allCases.filter { $0.category == .potion }))
+            items.append(.roll(&random, from: potions))
+        case .wisp:
+            items.append(.roll(&random, atLeast: .uncommon))
+            items.append(.roll(&random, from: potions))
         case .ogre:
-            items.append(.roll(&random, from: Item.allCases.filter { $0.category != .potion }, atLeast: .rare))
+            items.append(.roll(&random, from: gear, atLeast: .rare))
+            items.append(.roll(&random))
+            items.append(.roll(&random))
+        case .golem:
+            items.append(.roll(&random, from: gear, atLeast: .epic))
+            items.append(.roll(&random, atLeast: .uncommon))
             items.append(.roll(&random))
             items.append(.roll(&random))
         }

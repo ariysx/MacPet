@@ -45,6 +45,13 @@ Status: built. The original spec (approved 2026-09-30) is below, with the change
 - Up to **10** pets and eggs (was 4). The scene limit is 32 items; the atlas holds 10 pet regions, and new pets' frames are composed on a background thread.
 - **Throw physics:** a held pet springs toward the pointer; letting go keeps that velocity. Pets fly under gravity with light air drag, rebound off the screen edges, bounce on landing (with a squash frame), and settle. A pet thrown into a monster joins the fight with a double-damage first hit. Hard landings please Brave pets and upset Timid ones. The simulation ticks at 30 Hz so flight is smooth.
 
+### Monsters and fights
+
+- Seven monsters (weights out of 100): slime 30, shroomling 18, bat 18, wolf 14, wisp 10, ogre 6, golem 4. The bat and wisp fly. The ogre and golem are big (128 x 128 frames). All use the pet renderer: fur, cast shade, hi-res faces; each has a move cycle and an attack animation that plays right after it hits.
+- Loot scales with the monster: golems guarantee an epic-or-better weapon or relic.
+- **Hit feedback:** every blow is recorded (`World.hits`). The app shows an impact burst where it lands and, in play mode, a floating damage number. A monster's hit knocks the pet back into a hop (it then charges back in); pets' hits nudge the monster.
+- The daily chest falls in from the sky with a bounce and sparkles, so it doesn't look like something a pet left behind. The loot sack shows gold coins.
+
 ### Other changes
 
 - **Scene item limit is 24, not 12**, to fit weapons, loot and the chest.

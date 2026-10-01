@@ -54,6 +54,8 @@ struct World: Codable {
     var playerHitCooldown: Double = 0
     /// Things the app may want to notify about. The app drains this.
     var events: [WorldEvent] = []
+    /// Blows landed since the app last looked, for hit effects. The app drains this.
+    var hits: [CombatHit] = []
     var monsterSpawnChance = 0.12
     /// Local hour of day, 0..<24. Injected so tests can pick day or night.
     var localHour: () -> Double = World.systemLocalHour

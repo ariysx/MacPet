@@ -25,6 +25,7 @@ enum StaticSprite: Hashable {
     case bag
     case weapon(Item)
     case smoke(Int)
+    case impact(Int)
     case icon(IconKind)
 }
 
@@ -61,6 +62,7 @@ struct SpriteAtlas {
         small.append((.bag, PropArt.bag()))
         for item in Item.allCases where item.category == .weapon { small.append((.weapon(item), PropArt.weapon(item))) }
         for i in 0..<PropArt.smokeFrames { small.append((.smoke(i), PropArt.smoke(i))) }
+        for i in 0..<PropArt.impactFrames { small.append((.impact(i), PropArt.impact(i))) }
         for kind in IconKind.allCases { small.append((.icon(kind), shadowed(PropArt.icon(kind)))) }
 
         // 2x2 blocks first, packed along pairs of rows; then single tiles in the gaps.
