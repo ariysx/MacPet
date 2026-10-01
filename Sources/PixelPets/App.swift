@@ -176,14 +176,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let id = pet.id, looks = pet.looks
             Task.detached(priority: .userInitiated) { [weak self] in
                 let frames = PetComposer.frames(for: looks)
-                await MainActor.run {
-                    guard let self, let renderer = self.renderer, self.regions.isReserved(id, region: region) else { return }
-                    renderer.atlas.write(frames, region: region)
-                    self.regions.markReady(id)
-                    renderer.uploadAtlas()
-                }
+                await self?.installSprites(frames, id: id, region: region)
             }
         }
+    }
+
+    /// Writes a pet's freshly composed frames into the atlas, unless its region was freed meanwhile.
+    private func installSprites(_ frames: [PixelSprite], id: UUID, region: Int) {
+        guard let renderer, regions.isReserved(id, region: region) else { return }
+        renderer.atlas.write(frames, region: region)
+        regions.markReady(id)
+        renderer.uploadAtlas()
     }
 
     private func updateDayPhase() {
