@@ -407,8 +407,8 @@ extension SpeciesRig {
         b.parts.append(Part(headPolygon(b, [V2(1.05, -0.05), V2(1.45, -0.1), V2(1.3, -0.4)]), .dark, z: 1.2, group: 1))
         // Tufted tail.
         let base = q.bodyC + rotate(V2(-q.bodyR.x * 0.88, q.bodyR.y * 0.2), by: q.angle)
-        b.parts += w4TuftTail(from: base, angle: 3.5 + pose.tail * 0.3 - pose.dangle * 1.2 - pose.lying * 0.3,
-                              curl: -0.5 + pose.tail * 0.1 + pose.lying * 0.3, tuft: .wood, z: -1)
+        b.parts += w4TuftTail(from: base, angle: 2.45 + pose.tail * 0.2 - pose.dangle * 1.6 + pose.lying * 0.7 + pose.lift * 0.12,
+                              curl: -0.35 + pose.tail * 0.1, tuft: .wood, z: -1)
         b.eyeX = (0.28, 0.72)
         b.eyeY = 0.2
         b.mouth = V2(1.0, -0.62)
@@ -796,9 +796,9 @@ extension SpeciesRig {
         let shoulder = at(V2(0.8, 2.4))
         if open {
             let flap = pose.dangle > 0 ? pose.sway * 4 : (pose.paw > 0 ? 0.5 : 1)
-            b.parts += w4BatWing(shoulder + V2(0.6, 0.6), s: -1, flap: flap + 0.5, size: 1.05, z: -1.5, group: 11, bias: 1,
+            b.parts += w4BatWing(shoulder + V2(0.8, 0.6), s: -0.6, flap: flap + 0.8, size: 1.25, z: -1.5, group: 11, bias: 1,
                                  body: at(V2(-1, -3)))
-            b.parts += w4BatWing(shoulder + V2(-0.4, 0), s: -1, flap: flap, size: 1.15, z: 0.5, group: 12, bias: 0, body: at(V2(-2.5, -3)))
+            b.parts += w4BatWing(shoulder + V2(-0.4, 0), s: -1, flap: flap + 0.4, size: 1.3, z: 0.5, group: 12, bias: 0, body: at(V2(-2.5, -3)))
         } else {
             // Folded wings: slim dark blades from shoulder to wrist; it walks on its wrists.
             for near in [false, true] {
@@ -1097,7 +1097,7 @@ extension SpeciesRig {
         var a = start
         for i in 0..<3 {
             let next = p + rotate(V2(2.9, 0), by: a)
-            let r = [1.6, 2.1, 1.9][i]
+            let r = [1.2, 2.0, 1.9][i]
             parts.append(Part(.ellipse(c: (p + next) / 2, r: V2(2.2, r), angle: a), i == 2 ? .white : .body, z: z, group: group,
                               patterned: i < 2, toneBias: bias, role: .extremity))
             p = next
@@ -1147,8 +1147,8 @@ extension SpeciesRig {
             let tail = w4FoxTail(from: base, angle: start, curl: -0.15 + pose.lying * 0.05, z: -1 - Double(i % 2) * 0.1 - f * 0.01,
                                  group: -30 - i, bias: i % 2)
             b.parts += tail.parts
-            if i % 2 == 0 && pose.lying == 0 {
-                b.parts += w4Wisp(tail.tip + V2(0, 1.2), size: 1.1, flicker: flick * (i % 4 == 0 ? 1 : -1), ramp: .blue, z: 2.5,
+            if pose.lying == 0 {
+                b.parts += w4Wisp(tail.tip + V2(0, 0.6), size: 0.95, flicker: flick * (i % 2 == 0 ? 1 : -1), ramp: .blue, z: 2.5,
                                   group: -50 - i)
             }
         }
@@ -1196,8 +1196,8 @@ extension SpeciesRig {
             let tail = w4FoxTail(from: base, angle: start, curl: curl, z: (back ? 1.5 : -1.5) - mid + Double(i) * 0.001,
                                  group: -30 - i, bias: back ? 0 : i % 2)
             b.parts += tail.parts
-            if i % 2 == 0 && pose.lying == 0 {
-                b.parts += w4Wisp(tail.tip + V2(0, 1.2), size: 1.1, flicker: flick * (i % 4 == 0 ? 1 : -1), ramp: .blue, z: 2.5,
+            if pose.lying == 0 {
+                b.parts += w4Wisp(tail.tip + V2(0, 0.6), size: 0.95, flicker: flick * (i % 2 == 0 ? 1 : -1), ramp: .blue, z: 2.5,
                                   group: -50 - i)
             }
         }
@@ -1264,7 +1264,7 @@ extension SpeciesRig {
                             group: 21, toneBias: 1))
         // Lion tail with a tuft.
         let base = q.bodyC + rotate(V2(-q.bodyR.x * 0.88, q.bodyR.y * 0.2), by: q.angle)
-        b.parts += w4TuftTail(from: base, angle: 3.6 + pose.tail * 0.3 - pose.dangle * 1.2 - pose.lying * 0.3,
+        b.parts += w4TuftTail(from: base, angle: 2.45 + pose.tail * 0.2 - pose.dangle * 1.6 + pose.lying * 0.7 + pose.lift * 0.12,
                               curl: -0.35 + pose.tail * 0.1, tuft: .white, z: -1.2)
         // Great wings: folded along the back, swept up when it leaps or strikes.
         let open2 = w4Clamp(pose.wing * 1.2 + pose.dangle * 0.5)
