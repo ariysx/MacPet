@@ -106,13 +106,18 @@ struct UICanvas {
     }
 
     mutating func fill(_ r: UIRect, _ ink: UInt8) {
-        for y in max(0, r.y)..<min(height, r.y + r.h) {
-            for x in max(0, r.x)..<min(width, r.x + r.w) { pixels[y * width + x] = ink }
+        // Clip to the canvas; a rect partly or wholly off-screen must not form a backwards range.
+        let x0 = max(0, r.x), x1 = min(width, r.x + r.w)
+        let y0 = max(0, r.y), y1 = min(height, r.y + r.h)
+        guard x0 < x1, y0 < y1 else { return }
+        for y in y0..<y1 {
+            for x in x0..<x1 { pixels[y * width + x] = ink }
         }
     }
 
     /// A dark translucent panel with a crisp border and a lit top edge.
     mutating func panel(_ r: UIRect, border: Ramp = .dark) {
+        guard r.w > 2, r.h > 2 else { return }
         fill(r, UICanvas.dim)
         let edge = Ink.make(border, border == .dark ? .outline : .base)
         for x in r.x..<(r.x + r.w) { put(x, r.y, edge); put(x, r.y + r.h - 1, edge) }
@@ -195,7 +200,10 @@ final class PlayUI {
     }
 
     func toCanvas(_ grid: SIMD2<Float>) -> SIMD2<Int> {
-        SIMD2(Int(grid.x / PlayUI.scale), canvas.height - 1 - Int(grid.y / PlayUI.scale))
+        // Clamp first: converting a huge or non-finite Float to Int traps.
+        let x = grid.x.isFinite ? min(max(grid.x / PlayUI.scale, -10_000), 10_000) : 0
+        let y = grid.y.isFinite ? min(max(grid.y / PlayUI.scale, -10_000), 10_000) : 0
+        return SIMD2(Int(x), canvas.height - 1 - Int(y))
     }
 
     // MARK: Events
@@ -231,17 +239,18 @@ final class PlayUI {
             let top = toCanvas(SIMD2(hit.minX, hit.maxY))
             let right = toCanvas(SIMD2(hit.maxX, hit.minY))
             if dragging != nil {
-                let r = UIRect(x: top.x - 2, y: top.y - 2, w: right.x - top.x + 4, h: right.y - top.y + 4)
+                let r = UIRect(x: top.x - 2, y: top.y - 2, w: max(1, right.x - top.x + 4), h: max(1, right.y - top.y + 4))
                 for x in r.x..<(r.x + r.w) where x % 2 == 0 { canvas.put(x, r.y, PlayUI.white); canvas.put(x, r.y + r.h - 1, PlayUI.white) }
                 for y in r.y..<(r.y + r.h) where y % 2 == 0 { canvas.put(r.x, y, PlayUI.white); canvas.put(r.x + r.w - 1, y, PlayUI.white) }
             } else if case .pet(let id) = hit.target, let pet = world.pets.first(where: { $0.id == id }), pinnedPet != id {
                 let label = "\(pet.name)  " + String(repeating: "★", count: pet.looks.rarity.rawValue + 1)
                 let lw = PixelFont.width(label) + 8
-                let cx = (top.x + right.x) / 2
-                canvas.panel(UIRect(x: cx - lw / 2, y: top.y - 26, w: lw, h: 13))
-                canvas.text(pet.name.uppercased(), cx - lw / 2 + 4, top.y - 23, PlayUI.white)
-                let starX = cx - lw / 2 + 4 + PixelFont.width(pet.name + "  ") + 1
-                canvas.text(String(repeating: "★", count: pet.looks.rarity.rawValue + 1), starX, top.y - 23,
+                let left = min(max(2, (top.x + right.x) / 2 - lw / 2), canvas.width - lw - 2)
+                let tagY = min(max(20, top.y - 26), canvas.height - 50)
+                canvas.panel(UIRect(x: left, y: tagY, w: lw, h: 13))
+                canvas.text(pet.name.uppercased(), left + 4, tagY + 3, PlayUI.white)
+                let starX = left + 4 + PixelFont.width(pet.name + "  ") + 1
+                canvas.text(String(repeating: "★", count: pet.looks.rarity.rawValue + 1), starX, tagY + 3,
                             PlayUI.ink(pet.looks.rarity))
             }
         }

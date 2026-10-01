@@ -293,3 +293,31 @@ final class HitFeedbackTests: XCTestCase {
         XCTAssertTrue(world.hits.last!.onMonster)
     }
 }
+
+final class ThrowStressTests: XCTestCase {
+    /// Hundreds of wild swings and throws: nothing escapes the screen or goes non-finite.
+    func testWildThrowsStayFiniteAndOnScreen() {
+        var world = makeWorld()
+        var random = SeededRandom(seed: 77)
+        let ids = (0..<5).map { addPet(&world, x: Double(40 + $0 * 60)) }
+        world.spawnMonster(kind: .ogre, fromLeft: true)
+        for _ in 0..<300 {
+            let id = random.pick(ids)
+            guard world[pet: id] != nil else { continue }
+            world.pickUp(id: id)
+            for _ in 0..<3 {
+                world.moveHeld(id: id, x: random.double(in: -500...900), height: random.double(in: -100...2000))
+                world.tick(dt: 1.0 / 30)
+            }
+            world.moveHeld(id: id, x: .nan, height: .infinity)
+            world.throwHeld(id: id)
+            world.run(seconds: 0.5, step: 1.0 / 30)
+            for pet in world.pets {
+                XCTAssertTrue(pet.x.isFinite && pet.height.isFinite && pet.vx.isFinite && pet.vy.isFinite)
+                XCTAssertGreaterThanOrEqual(pet.x, 0)
+                XCTAssertLessThanOrEqual(pet.x, World.width)
+                XCTAssertLessThanOrEqual(pet.height, World.maxHeight)
+            }
+        }
+    }
+}

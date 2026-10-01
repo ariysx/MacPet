@@ -269,8 +269,9 @@ struct World: Codable {
             let k = min(1, dt * 18)
             let nx = pets[i].x + (pets[i].heldTargetX - pets[i].x) * k
             let nh = pets[i].height + (pets[i].heldTargetHeight - pets[i].height) * k
-            pets[i].vx = (nx - pets[i].x) / dt
-            pets[i].vy = (nh - pets[i].height) / dt
+            let limit = World.maxThrowSpeed
+            pets[i].vx = max(-limit, min(limit, (nx - pets[i].x) / dt))
+            pets[i].vy = max(-limit, min(limit, (nh - pets[i].height) / dt))
             if abs(pets[i].vx) > 20 { pets[i].facingLeft = pets[i].vx < 0 }
             pets[i].x = nx
             pets[i].height = nh
@@ -486,10 +487,13 @@ struct World: Codable {
 
     /// Moves the point the held pet springs toward.
     mutating func moveHeld(id: UUID, x: Double, height: Double) {
-        guard let i = petIndex(id), pets[i].held else { return }
+        guard let i = petIndex(id), pets[i].held, x.isFinite, height.isFinite else { return }
         pets[i].heldTargetX = min(World.width, max(0, x))
-        pets[i].heldTargetHeight = max(0, height)
+        pets[i].heldTargetHeight = min(World.maxHeight, max(0, height))
     }
+
+    /// The highest a pet can be lifted or thrown.
+    static let maxHeight: Double = 220
 
     static let gravity: Double = 520
     static let maxThrowSpeed: Double = 420
@@ -506,8 +510,9 @@ struct World: Codable {
     mutating func drop(id: UUID, x: Double, height: Double, velocity: SIMD2<Double> = .zero) {
         guard let i = petIndex(id) else { return }
         pets[i].held = false
-        pets[i].x = clampX(x)
-        pets[i].height = max(0, height)
+        pets[i].x = clampX(x.isFinite ? x : pets[i].x)
+        pets[i].height = height.isFinite ? min(World.maxHeight, max(0, height)) : 0
+        let velocity = SIMD2(velocity.x.isFinite ? velocity.x : 0, velocity.y.isFinite ? velocity.y : 0)
         pets[i].vx = max(-World.maxThrowSpeed, min(World.maxThrowSpeed, velocity.x))
         pets[i].vy = max(-World.maxThrowSpeed, min(World.maxThrowSpeed, velocity.y))
         if pets[i].height == 0 && pets[i].vy <= 0 { pets[i].vy = 0; pets[i].vx = 0 }
@@ -531,6 +536,7 @@ struct World: Codable {
         pets[i].vx *= max(0, 1 - 0.35 * dt)
         pets[i].x += pets[i].vx * dt
         pets[i].height += pets[i].vy * dt
+        if pets[i].height > World.maxHeight { pets[i].height = World.maxHeight; pets[i].vy = min(0, pets[i].vy) }
         if abs(pets[i].vx) > 8 { pets[i].facingLeft = pets[i].vx < 0 }
 
         let lo = World.edgeMargin, hi = World.width - World.edgeMargin
