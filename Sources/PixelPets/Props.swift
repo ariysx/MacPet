@@ -192,37 +192,38 @@ enum PropArt {
         Rig.render(weaponParts(item), size: 64, scale: 2)
     }
 
-    static func weaponParts(_ item: Item) -> [Part] {
+    /// `thick` widens blades and handles, for small icons.
+    static func weaponParts(_ item: Item, thick: Double = 1) -> [Part] {
         let grip = V2(16, 6)
         let dir = rotate(V2(0, 1), by: -0.55)
-        func along(_ d: Double, _ side: Double = 0) -> V2 { grip + dir * d + V2(dir.y, -dir.x) * side }
+        func along(_ d: Double, _ side: Double = 0) -> V2 { grip + dir * d + V2(dir.y, -dir.x) * side * thick }
         var parts: [Part] = []
         func blade(_ length: Double, width: Double, ramp: Ramp) {
             parts.append(Part(.polygon([along(3, -width), along(length - 2, -width), along(length, 0), along(length - 2, width),
                                         along(3, width)]), ramp, z: 0, group: 0))
         }
         func guardBar(_ ramp: Ramp) {
-            parts.append(Part(.capsule(a: along(2.5, -3), b: along(2.5, 3), ra: 0.9, rb: 0.9), ramp, z: 1, group: 1))
+            parts.append(Part(.capsule(a: along(2.5, -3), b: along(2.5, 3), ra: 0.9 * thick, rb: 0.9 * thick), ramp, z: 1, group: 1))
         }
         func handle(_ ramp: Ramp, _ length: Double = 3) {
-            parts.append(Part(.capsule(a: along(-length), b: along(2), ra: 0.9, rb: 0.9), ramp, z: 0.5, group: 2))
+            parts.append(Part(.capsule(a: along(-length), b: along(2), ra: 0.9 * thick, rb: 0.9 * thick), ramp, z: 0.5, group: 2))
         }
         switch item {
         case .stick:
-            parts.append(Part(.capsule(a: along(-3), b: along(13), ra: 1.1, rb: 0.8), .wood, z: 0))
-            parts.append(Part(.capsule(a: along(7), b: along(9, 2.5), ra: 0.6, rb: 0.5), .wood, z: 0.1, group: 1))
+            parts.append(Part(.capsule(a: along(-3), b: along(13), ra: 1.1 * thick, rb: 0.8 * thick), .wood, z: 0))
+            parts.append(Part(.capsule(a: along(7), b: along(9, 2.5), ra: 0.6 * thick, rb: 0.5 * thick), .wood, z: 0.1, group: 1))
         case .woodenSword:
             blade(15, width: 1.6, ramp: .wood); guardBar(.wood); handle(.wood)
         case .ironSword:
             blade(17, width: 1.6, ramp: .white); guardBar(.gold); handle(.wood)
         case .slingshot:
-            parts.append(Part(.capsule(a: along(-3), b: along(5), ra: 1, rb: 1), .wood, z: 0, group: 0))
-            parts.append(Part(.capsule(a: along(5), b: along(11, -3), ra: 1, rb: 0.8), .wood, z: 0, group: 1))
-            parts.append(Part(.capsule(a: along(5), b: along(11, 3), ra: 1, rb: 0.8), .wood, z: 0, group: 2))
-            parts.append(Part(.capsule(a: along(10.5, -3), b: along(10.5, 3), ra: 0.45, rb: 0.45), .red, z: 0.5, group: 3,
+            parts.append(Part(.capsule(a: along(-3), b: along(5), ra: 1 * thick, rb: 1 * thick), .wood, z: 0, group: 0))
+            parts.append(Part(.capsule(a: along(5), b: along(11, -3), ra: 1 * thick, rb: 0.8 * thick), .wood, z: 0, group: 1))
+            parts.append(Part(.capsule(a: along(5), b: along(11, 3), ra: 1 * thick, rb: 0.8 * thick), .wood, z: 0, group: 2))
+            parts.append(Part(.capsule(a: along(10.5, -3), b: along(10.5, 3), ra: 0.45 * thick, rb: 0.45 * thick), .red, z: 0.5, group: 3,
                               innerOutline: false))
         case .magicWand:
-            parts.append(Part(.capsule(a: along(-3), b: along(11), ra: 0.9, rb: 0.8), .purple, z: 0))
+            parts.append(Part(.capsule(a: along(-3), b: along(11), ra: 0.9 * thick, rb: 0.8 * thick), .purple, z: 0))
             let tip = along(13)
             let star = (0..<10).map { k -> V2 in
                 let a = Double(k) / 10 * 2 * .pi + 0.3
@@ -232,7 +233,7 @@ enum PropArt {
         default: // Dragon Fang
             parts.append(Part(.polygon([along(2, -2), along(9, -1.8), along(15, 1.5), along(9, 1.5), along(2, 1.8)]),
                               .white, z: 0))
-            parts.append(Part(.capsule(a: along(-3), b: along(2), ra: 1.1, rb: 1.1), .red, z: 0.5, group: 2))
+            parts.append(Part(.capsule(a: along(-3), b: along(2), ra: 1.1 * thick, rb: 1.1 * thick), .red, z: 0.5, group: 2))
         }
         return parts
     }
@@ -365,7 +366,7 @@ enum ItemArt {
 
     private static func parts(_ item: Item) -> [Part] {
         if item.category == .weapon {
-            return PropArt.weaponParts(item).map { part in
+            return PropArt.weaponParts(item, thick: 1.9).map { part in
                 var p = part
                 p.shape = part.shape.transformed({ $0 + V2(-4, 3) }, scale: 1)
                 return p

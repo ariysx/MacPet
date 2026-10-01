@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var playMode = false
     private(set) var renderer: PetsRenderer?
     private(set) var regions = PetSpriteRegions()
+    let playUI = PlayUI()
     private(set) var dayPhase: Float = 0.5
     private(set) var backgroundTexture: MTLTexture?
     private var auroraTonight = false
@@ -333,9 +334,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if status != noErr { petsLog("could not register ⌥⌘P (status \(status))") }
     }
 
+    /// Opens a chest or picks up a bag, with the item reveal.
+    func openLoot(id: UUID) {
+        guard let loot = world.loot.first(where: { $0.id == id }) else { return }
+        let items = world.collectLoot(id: id)
+        playUI.showReveal(title: loot.kind == .dailyChest ? "DAILY CHEST!" : "LOOT!", items: items,
+                          atGridX: Float(loot.x) * SceneBuilder.worldScale)
+        flushEvents()
+    }
+
+    /// Floating text over a pet, in play mode.
+    private func toast(_ text: String, ink: UInt8 = PlayUI.white, pet name: String? = nil) {
+        let x = name.flatMap { n in world.pets.first { $0.name == n } }.map { Float($0.x) * SceneBuilder.worldScale }
+        playUI.toast(text, ink: ink, atGrid: x.map { SIMD2($0, 200) })
+    }
+
     // MARK: Notifications
 
     private func handle(_ event: WorldEvent) {
+        switch event {
+        case .hatched(let name, _): toast("\(name) hatched!", ink: PlayUI.ink(.rare), pet: name)
+        case .laidEgg(let parent): toast("\(parent) laid an egg!", ink: PlayUI.ink(.uncommon), pet: parent)
+        case .died(let name, _): toast("\(name) died", ink: PlayUI.grey)
+        case .monsterArrived(let kind): toast("a \(kind.rawValue) appears!", ink: Ink.make(.red, .light))
+        case .monsterDefeated: toast("victory! loot dropped", ink: Ink.make(.gold, .light))
+        case .monsterAte(let kind): toast("the \(kind.rawValue) ate your food", ink: Ink.make(.red, .light))
+        case .revived(let name): toast("\(name) rose from the ashes!", ink: Ink.make(.gold, .light), pet: name)
+        case .dailyChestArrived: toast("a daily chest appeared!", ink: Ink.make(.gold, .light))
+        case .lootCollected(let items, _): toast("+\(items.count) items", ink: PlayUI.ink(.uncommon))
+        case .needsCare(let name, let reason): toast(reason == .starving ? "\(name) is starving!" : "\(name) is sick",
+                                                     ink: Ink.make(.red, .light), pet: name)
+        }
+        notify(event)
+    }
+
+    private func notify(_ event: WorldEvent) {
         switch event {
         case .hatched(let name, let mutations):
             let rarity = world.pets.first { $0.name == name }?.looks.rarity ?? .common
@@ -430,7 +463,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let chests = world.loot.filter { $0.kind == .dailyChest }
         let bags = world.loot.filter { $0.kind == .bag }
         for chest in chests {
-            menu.addItem(action("Open Daily Chest") { [unowned self] in world.collectLoot(id: chest.id); flushEvents() })
+            menu.addItem(action("Open Daily Chest") { [unowned self] in
+                if !playMode { setPlayMode(true) }
+                openLoot(id: chest.id)
+            })
         }
         if !bags.isEmpty {
             menu.addItem(action(bags.count == 1 ? "Pick Up Loot Bag" : "Pick Up \(bags.count) Loot Bags") { [unowned self] in

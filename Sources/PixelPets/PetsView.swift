@@ -20,6 +20,7 @@ final class PetsRenderer {
     private let atlasTexture: MTLTexture
     /// Bound when there is no background image, so texture(1) is always valid.
     private let blank: MTLTexture
+    private var uiTexture: MTLTexture?
     var atlas: SpriteAtlas
 
     init?() {
@@ -71,7 +72,29 @@ final class PetsRenderer {
         }
     }
 
-    func draw(in view: MTKView, uniforms: SceneUniforms, items: [SceneItem], background: MTLTexture?) {
+    struct UIUniforms {
+        var primary: SIMD4<Float> = .zero
+        var secondary: SIMD4<Float> = .zero
+        var enabled: UInt32 = 0
+        var pad: SIMD3<UInt32> = .zero
+    }
+
+    /// Uploads the play-mode UI canvas (one byte per pixel).
+    func uploadUI(_ canvas: UICanvas) {
+        if uiTexture?.width != canvas.width || uiTexture?.height != canvas.height {
+            let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r8Uint, width: canvas.width, height: canvas.height,
+                                                             mipmapped: false)
+            d.usage = .shaderRead
+            uiTexture = device.makeTexture(descriptor: d)
+        }
+        canvas.pixels.withUnsafeBytes { bytes in
+            uiTexture?.replace(region: MTLRegionMake2D(0, 0, canvas.width, canvas.height), mipmapLevel: 0,
+                               withBytes: bytes.baseAddress!, bytesPerRow: canvas.width)
+        }
+    }
+
+    func draw(in view: MTKView, uniforms: SceneUniforms, items: [SceneItem], background: MTLTexture?,
+              ui: UIUniforms = UIUniforms()) {
         guard let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let commands = queue.makeCommandBuffer(),
@@ -89,6 +112,10 @@ final class PetsRenderer {
         }
         encoder.setFragmentTexture(atlasTexture, index: 0)
         encoder.setFragmentTexture(background ?? blank, index: 1)
+        var uiu = ui
+        if uiTexture == nil { uiu.enabled = 0 }
+        encoder.setFragmentTexture(uiTexture ?? atlasTexture, index: 2)
+        encoder.setFragmentBytes(&uiu, length: MemoryLayout<UIUniforms>.stride, index: 2)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
         commands.present(drawable)
@@ -186,7 +213,19 @@ final class PetsView: MTKView {
                                      playMode: app.playMode ? 1 : 0,
                                      itemCount: UInt32(items.count),
                                      background: app.backgroundInfo)
-        renderer.draw(in: self, uniforms: uniforms, items: items, background: app.backgroundTexture)
+        var ui = PetsRenderer.UIUniforms()
+        if isMain && app.playMode {
+            let playUI = app.playUI
+            playUI.resize(gridWidth: Int(grid.x), gridHeight: Int(grid.y))
+            if let colours = playUI.render(world: app.world, hits: lastFrame.hits, atlas: renderer.atlas,
+                                           regions: app.regions, time: app.renderTime, groundY: groundY) {
+                ui.primary = PetPalette.rgba(colours.primary)
+                ui.secondary = PetPalette.rgba(colours.secondary)
+            }
+            renderer.uploadUI(playUI.canvas)
+            ui.enabled = 1
+        }
+        renderer.draw(in: self, uniforms: uniforms, items: items, background: app.backgroundTexture, ui: ui)
     }
 
     // MARK: Input (play mode, main display only)
@@ -230,12 +269,27 @@ final class PetsView: MTKView {
 
     override func mouseMoved(with event: NSEvent) {
         app.noteInput()
+        let p = gridPoint(event)
+        app.playUI.gridPointer = p
+        app.playUI.pointer = app.playUI.toCanvas(p)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard isMain, app.playMode else { return }
+        app.noteInput()
+        app.playUI.rightClick(grid: gridPoint(event), hits: lastFrame.hits)
     }
 
     override func mouseDown(with event: NSEvent) {
         guard isMain, app.playMode else { return }
         app.noteInput()
         let p = gridPoint(event)
+        app.playUI.gridPointer = p
+        if app.playUI.mouseDown(at: app.playUI.toCanvas(p), world: &app.world) { return }
+        if event.modifierFlags.contains(.control) {
+            app.playUI.rightClick(grid: p, hits: lastFrame.hits)
+            return
+        }
         if feedKeyDown || event.modifierFlags.contains(.option) {
             app.world.dropPellet(x: worldX(p))
             return
@@ -247,16 +301,19 @@ final class PetsView: MTKView {
         case .egg(let id):
             app.world.petEgg(id: id)
         case .loot(let id):
-            app.world.collectLoot(id: id)
+            app.openLoot(id: id)
         case .pet:
             press = Press(target: hit.target, box: hit, start: p, lastX: p.x)
         }
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard isMain, app.playMode, var pr = press, case .pet(let id) = pr.target else { return }
-        app.noteInput()
+        guard isMain, app.playMode else { return }
         let p = gridPoint(event)
+        app.playUI.gridPointer = p
+        if app.playUI.mouseDragged(at: app.playUI.toCanvas(p)) { app.noteInput(); return }
+        guard var pr = press, case .pet(let id) = pr.target else { return }
+        app.noteInput()
         if pr.pickedUp {
             app.world.moveHeld(id: id, x: worldX(p), height: heldHeight(p))
             press = pr
@@ -290,8 +347,10 @@ final class PetsView: MTKView {
 
     override func mouseUp(with event: NSEvent) {
         defer { press = nil }
-        guard isMain, app.playMode, let pr = press, case .pet(let id) = pr.target else { return }
+        guard isMain, app.playMode else { return }
         let p = gridPoint(event)
+        if app.playUI.mouseUp(at: app.playUI.toCanvas(p), grid: p, hits: lastFrame.hits, world: &app.world) { return }
+        guard let pr = press, case .pet(let id) = pr.target else { return }
         if pr.pickedUp {
             app.world.drop(id: id, x: worldX(p), height: heldHeight(p))
         } else if !pr.rubbed {

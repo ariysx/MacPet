@@ -26,6 +26,13 @@ The pets live under your desktop icons. To interact with them, press **⌥⌘P**
 | Hit a monster | Click it. |
 | Loot | Click a loot bag or the daily chest. |
 
+In play mode the screen shows the game's interface:
+
+- **Bag bar** at the bottom: every item with its rarity frame and count. Hover an item to see what it does. **Drag it onto a pet** to equip a weapon or relic, or to drink a potion; drag Hatch Elixir or Mutagen onto an egg.
+- **Chests and loot bags** pop open with a reveal of each item and its rarity, then go into the bag.
+- **Right-click a pet** (or Control-click) for its card: portrait, rarity, generation, traits, health, food, joy and energy, and its weapon and relic slots. Click a slot to put the item back in the bag.
+- Name tags when you hover a pet, and floating text for hatches, fights, loot and equipment.
+
 Bars above each pet: red is health, orange is hunger, pink is happiness. Outside play mode they only show when something is low.
 
 Time only passes while the app is running and the screen is awake. A pet needs feeding a couple of times a day and dies after about two to three days of total neglect.

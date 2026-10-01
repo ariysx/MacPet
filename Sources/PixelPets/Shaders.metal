@@ -30,6 +30,14 @@ struct SceneItem {
     float  shadow;       // ground shadow half-width; 0 = none
 };
 
+// The play-mode UI layer (UI.swift), drawn at half resolution.
+struct UIUniforms {
+    float4 primary;      // colours for a pet portrait in the UI
+    float4 secondary;
+    uint   enabled;
+    uint3  pad;
+};
+
 constant uint kMaxItems = 24;
 constant uint kAtlasColumns = 16;
 constant float kTile = 64.0;
@@ -458,7 +466,7 @@ static float3 drawItem(constant SceneItem& it, float2 g, float groundTop, float3
 
     // Bars and icons are drawn at 2x, matching the chunkier HUD scale.
     float iconBase = origin.y + (it.barLift > 0.0 ? it.barLift : size);
-    float2 hud = floor((g - float2(0.0, iconBase)) / 2.0);
+    float2 hud = floor((g - float2(0.0, iconBase)) / 2.0); // bars and icons at 2x
     if (it.bars.x >= 0.0) {
         bool single = (it.flags & (kEggBar | kMonsterBar)) != 0u;
         float count = single ? 1.0 : 3.0;
@@ -518,7 +526,9 @@ fragment float4 petsFragment(VOut in [[stage_in]],
                              constant SceneUniforms& u [[buffer(0)]],
                              constant SceneItem* items [[buffer(1)]],
                              texture2d<uint, access::read> atlas [[texture(0)]],
-                             texture2d<float, access::sample> image [[texture(1)]]) {
+                             texture2d<float, access::sample> image [[texture(1)]],
+                             texture2d<uint, access::read> ui [[texture(2)]],
+                             constant UIUniforms& uu [[buffer(2)]]) {
     // Snap every screen pixel to its cell on the virtual grid, origin bottom-left.
     float cell = u.resolution.x / u.grid.x;
     float2 frag = float2(in.position.x, u.resolution.y - in.position.y);
@@ -537,5 +547,16 @@ fragment float4 petsFragment(VOut in [[stage_in]],
         col = drawItem(items[i], g, groundTop, light, u, atlas, col);
     }
     if ((u.background.x & kBackgroundImage) == 0u) col = foreground(g, u, col);
+
+    if (uu.enabled != 0u) {
+        int uw = int(ui.get_width()), uh = int(ui.get_height());
+        float s = u.grid.x / float(uw); // grid pixels per UI pixel
+        int ux = int(g.x / s), uy = uh - 1 - int(g.y / s);
+        if (ux >= 0 && uy >= 0 && ux < uw && uy < uh) {
+            uint ink = ui.read(uint2(uint(ux), uint(uy))).r;
+            if (ink == 255u) col = mix(col, float3(0.08, 0.07, 0.12), 0.62);
+            else if (ink != 0u) col = inkColour(ink, uu.primary.rgb, uu.secondary.rgb);
+        }
+    }
     return float4(saturate(col), 1.0);
 }
