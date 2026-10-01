@@ -185,3 +185,92 @@ final class FightTests: XCTestCase {
         XCTAssertEqual(Double(counts[.ogre]!) / 10_000, 0.1, accuracy: 0.03)
     }
 }
+
+final class PhysicsTests: XCTestCase {
+    func testDroppedFromHeightFallsWithGravity() {
+        var world = makeWorld()
+        let id = addPet(&world)
+        world.pickUp(id: id)
+        world.drop(id: id, x: 150, height: 80)
+        world.run(seconds: 0.2, step: 1.0 / 30)
+        let h = world[pet: id]!.height
+        XCTAssertLessThan(h, 80)
+        XCTAssertGreaterThan(h, 60, "gravity accelerates, so it starts slow")
+        world.run(seconds: 3, step: 1.0 / 30)
+        XCTAssertEqual(world[pet: id]!.height, 0)
+        XCTAssertFalse(world[pet: id]!.isFalling)
+    }
+
+    func testThrowCarriesSwingVelocityAndBounces() {
+        var world = makeWorld()
+        let id = addPet(&world, x: 100)
+        world.pickUp(id: id)
+        world.moveHeld(id: id, x: 100, height: 40)
+        world.run(seconds: 0.5, step: 1.0 / 30)
+        // Swing quickly to the right and up, then let go mid-swing.
+        world.moveHeld(id: id, x: 160, height: 70)
+        world.run(seconds: 2.0 / 30, step: 1.0 / 30)
+        XCTAssertGreaterThan(world[pet: id]!.vx, 100)
+        let releasedAt = world[pet: id]!.x
+        world.throwHeld(id: id)
+        var bounced = false
+        var furthest = releasedAt
+        var lastVy = world[pet: id]!.vy
+        for _ in 0..<150 {
+            world.tick(dt: 1.0 / 30)
+            let vy = world[pet: id]!.vy
+            if lastVy < 0 && vy > 0 { bounced = true }
+            lastVy = vy
+            furthest = max(furthest, world[pet: id]!.x)
+        }
+        let pet = world[pet: id]!
+        XCTAssertTrue(bounced)
+        XCTAssertGreaterThan(furthest, releasedAt + 80, "it kept flying after the swing")
+        XCTAssertEqual(pet.height, 0)
+        XCTAssertEqual(pet.vx, 0)
+    }
+
+    func testWallsBounceThrownPets() {
+        var world = makeWorld()
+        let id = addPet(&world)
+        world.pickUp(id: id)
+        world.drop(id: id, x: 300, height: 30, velocity: SIMD2(400, 50))
+        var minVx = 0.0
+        for _ in 0..<60 {
+            world.tick(dt: 1.0 / 30)
+            XCTAssertLessThanOrEqual(world[pet: id]!.x, World.width - World.edgeMargin)
+            minVx = min(minVx, world[pet: id]!.vx)
+        }
+        XCTAssertLessThan(minVx, 0, "it rebounded off the right edge")
+    }
+
+    func testThrowingAPetAtTheMonsterJoinsTheFight() {
+        var world = makeWorld()
+        var timid = Traits.plain
+        timid.courage = .timid
+        let id = addPet(&world, traits: timid, x: 60)
+        world.spawnMonster(kind: .ogre, fromLeft: false)
+        world.monster!.x = 200
+        world.monster!.hitCooldown = 100
+        world.pickUp(id: id)
+        world.drop(id: id, x: 120, height: 25, velocity: SIMD2(260, 40))
+        world.run(seconds: 1, step: 1.0 / 30)
+        XCTAssertEqual(world[pet: id]!.fight, .fighting)
+    }
+
+    func testHardLandingsPleaseBravePetsAndUpsetTimidOnes() {
+        var world = makeWorld()
+        var timid = Traits.plain
+        timid.courage = .timid
+        let brave = addPet(&world, x: 60)
+        let scared = addPet(&world, traits: timid, x: 250)
+        for id in [brave, scared] {
+            world.update(id) { $0.happiness = 50 }
+            world.pickUp(id: id)
+            world.drop(id: id, x: id == brave ? 60 : 250, height: 120)
+        }
+        world.run(seconds: 0.8, step: 1.0 / 30)
+        XCTAssertGreaterThan(world[pet: brave]!.happiness, 50)
+        XCTAssertLessThan(world[pet: scared]!.happiness, 50)
+    }
+}

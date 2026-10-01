@@ -17,7 +17,7 @@ enum WorldEvent: Equatable {
 /// matters on the ground, and `height` is how far above the ground line a pet is.
 struct World: Codable {
     static let width: Double = 320
-    static let maxSlots = 4
+    static let maxSlots = 10
     static let edgeMargin: Double = 8
     static let minSpacing: Double = 6
     static let maxPellets = 6
@@ -261,12 +261,22 @@ struct World: Codable {
 
     /// Pet AI, in order: held, falling, eating, fighting or fleeing, food, sleep, wander.
     private mutating func updateBehaviour(petIndex i: Int, dt: Double) {
+        pets[i].landSquash = max(0, pets[i].landSquash - dt)
         if pets[i].held {
+            // Spring toward the pointer; the motion becomes the throw velocity.
+            let k = min(1, dt * 18)
+            let nx = pets[i].x + (pets[i].heldTargetX - pets[i].x) * k
+            let nh = pets[i].height + (pets[i].heldTargetHeight - pets[i].height) * k
+            pets[i].vx = (nx - pets[i].x) / dt
+            pets[i].vy = (nh - pets[i].height) / dt
+            if abs(pets[i].vx) > 20 { pets[i].facingLeft = pets[i].vx < 0 }
+            pets[i].x = nx
+            pets[i].height = nh
             pets[i].isWalking = false
             return
         }
-        if pets[i].height > 0 {
-            pets[i].height = max(0, pets[i].height - 160 * dt)
+        if pets[i].isFalling {
+            fly(petIndex: i, dt: dt)
             pets[i].isWalking = false
             return
         }
@@ -462,6 +472,8 @@ struct World: Codable {
         guard let i = petIndex(id) else { return }
         releaseFood(petIndex: i)
         pets[i].held = true
+        pets[i].heldTargetX = pets[i].x
+        pets[i].heldTargetHeight = pets[i].height
         pets[i].sleep = .awake
         pets[i].eatingRemaining = 0
         pets[i].pendingMeal = 0
@@ -470,26 +482,83 @@ struct World: Codable {
         pets[i].feeling = Feelings.resolve(pets[i])
     }
 
+    /// Moves the point the held pet springs toward.
     mutating func moveHeld(id: UUID, x: Double, height: Double) {
         guard let i = petIndex(id), pets[i].held else { return }
-        pets[i].x = min(World.width, max(0, x))
-        pets[i].height = max(0, height)
+        pets[i].heldTargetX = min(World.width, max(0, x))
+        pets[i].heldTargetHeight = max(0, height)
     }
 
-    /// Lets go. Dropped on the monster, the pet joins the fight and its first hit does double damage.
-    mutating func drop(id: UUID, x: Double, height: Double) {
+    static let gravity: Double = 520
+    static let maxThrowSpeed: Double = 420
+
+    /// Lets go at the pet's current spot, keeping the speed it was being swung at: a throw.
+    mutating func throwHeld(id: UUID) {
+        guard let i = petIndex(id) else { return }
+        let v = SIMD2(pets[i].vx, pets[i].vy)
+        drop(id: id, x: pets[i].x, height: pets[i].height, velocity: v)
+    }
+
+    /// Lets go at a spot, optionally with a velocity. Dropped on the monster, the pet joins the
+    /// fight and its first hit does double damage.
+    mutating func drop(id: UUID, x: Double, height: Double, velocity: SIMD2<Double> = .zero) {
         guard let i = petIndex(id) else { return }
         pets[i].held = false
         pets[i].x = clampX(x)
         pets[i].height = max(0, height)
+        pets[i].vx = max(-World.maxThrowSpeed, min(World.maxThrowSpeed, velocity.x))
+        pets[i].vy = max(-World.maxThrowSpeed, min(World.maxThrowSpeed, velocity.y))
+        if pets[i].height == 0 && pets[i].vy <= 0 { pets[i].vy = 0; pets[i].vx = 0 }
         pets[i].wanderTimer = random.double(in: 3...8)
         pets[i].targetX = pets[i].x
-        if let m = monster, m.phase == .attacking, abs(x - m.x) <= m.kind.halfWidth + 4 {
-            pets[i].fight = .fighting
-            pets[i].thrownBonus = true
-            pets[i].attackCooldown = 0
+        if let m = monster, m.phase == .attacking, abs(x - m.x) <= m.kind.halfWidth + 4, height < 14 {
+            joinFightByThrow(petIndex: i)
         }
         pets[i].feeling = Feelings.resolve(pets[i])
+    }
+
+    private mutating func joinFightByThrow(petIndex i: Int) {
+        pets[i].fight = .fighting
+        pets[i].thrownBonus = true
+        pets[i].attackCooldown = 0
+    }
+
+    /// One step of flight: gravity, a little air drag, walls, monsters, and bouncy landings.
+    private mutating func fly(petIndex i: Int, dt: Double) {
+        pets[i].vy -= World.gravity * dt
+        pets[i].vx *= max(0, 1 - 0.35 * dt)
+        pets[i].x += pets[i].vx * dt
+        pets[i].height += pets[i].vy * dt
+        if abs(pets[i].vx) > 8 { pets[i].facingLeft = pets[i].vx < 0 }
+
+        let lo = World.edgeMargin, hi = World.width - World.edgeMargin
+        if pets[i].x < lo { pets[i].x = lo; pets[i].vx = abs(pets[i].vx) * 0.55 }
+        if pets[i].x > hi { pets[i].x = hi; pets[i].vx = -abs(pets[i].vx) * 0.55 }
+
+        if let m = monster, m.phase == .attacking, pets[i].fight != .fighting,
+           abs(pets[i].x - m.x) < m.kind.halfWidth + 3, pets[i].height < 14 {
+            joinFightByThrow(petIndex: i)
+            pets[i].vx = -pets[i].vx * 0.25
+        }
+
+        if pets[i].height <= 0 {
+            pets[i].height = 0
+            let impact = -pets[i].vy
+            pets[i].landSquash = 0.16
+            if impact > 90 {
+                // Bounce, losing most of the energy.
+                pets[i].vy = impact * 0.38
+                pets[i].vx *= 0.6
+                if impact > 260 {
+                    pets[i].happiness += pets[i].courage == .brave ? 3 : -4
+                    pets[i].clampNeeds()
+                }
+            } else {
+                pets[i].vy = 0
+                pets[i].vx = 0
+                pets[i].targetX = pets[i].x
+            }
+        }
     }
 
     // MARK: Loading
@@ -503,6 +572,8 @@ struct World: Codable {
         for i in pets.indices {
             pets[i].held = false
             pets[i].height = 0
+            pets[i].vx = 0
+            pets[i].vy = 0
             pets[i].foodTarget = nil
             pets[i].eatingRemaining = 0
             pets[i].pendingMeal = 0

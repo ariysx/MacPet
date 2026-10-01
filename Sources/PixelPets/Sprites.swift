@@ -114,7 +114,11 @@ struct SpriteAtlas {
 
     /// Composes a pet's frames and writes them into `region`.
     mutating func writePet(region: Int, looks: Looks) {
-        for (i, sprite) in PetComposer.frames(for: looks).enumerated() {
+        write(PetComposer.frames(for: looks), region: region)
+    }
+
+    mutating func write(_ frames: [PixelSprite], region: Int) {
+        for (i, sprite) in frames.enumerated() where i < regionTiles[region].count {
             blit(sprite, tile: regionTiles[region][i])
         }
     }
@@ -146,6 +150,34 @@ struct SpriteAtlas {
 /// Which atlas region each living pet's frames live in.
 struct PetSpriteRegions {
     private(set) var assigned: [UUID: Int] = [:]
+    /// Regions handed out whose frames are still being composed.
+    private var pending: Set<UUID> = []
+
+    func isAssigned(_ id: UUID) -> Bool { assigned[id] != nil }
+    func isReserved(_ id: UUID, region: Int) -> Bool { assigned[id] == region }
+
+    /// Frees the regions of pets that are gone.
+    mutating func releaseGone(_ pets: [Pet]) {
+        let living = Set(pets.map(\.id))
+        assigned = assigned.filter { living.contains($0.key) }
+        pending = pending.filter { living.contains($0) }
+    }
+
+    /// Hands a free region to a pet whose frames are about to be composed.
+    mutating func reserve(_ id: UUID) -> Int? {
+        let used = Set(assigned.values)
+        guard let region = (0..<SpriteAtlas.regionCount).first(where: { !used.contains($0) }) else { return nil }
+        assigned[id] = region
+        pending.insert(id)
+        return region
+    }
+
+    mutating func markReady(_ id: UUID) { pending.remove(id) }
+
+    /// The pet's region once its frames are in the atlas.
+    func readyRegion(for id: UUID) -> Int? {
+        pending.contains(id) ? nil : assigned[id]
+    }
 
     /// Gives new pets a region (composing their sprites) and frees the regions of pets that
     /// are gone. Returns true when the atlas pixels changed.

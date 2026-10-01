@@ -124,14 +124,14 @@ final class PopulationTests: XCTestCase {
         world.update(id) { $0.contentTime = 6 * hour - 5 }
         world.advance(by: 3)
         XCTAssertTrue(world.eggs.isEmpty)
-        // Fill the other three slots.
-        for x in [40.0, 80, 240] { world.addEgg(at: x, genes: nil) }
+        // Fill every other slot.
+        for k in 1..<World.maxSlots { world.addEgg(at: Double(20 + k * 25), genes: nil) }
         world.advance(by: 5)
-        XCTAssertEqual(world.eggs.count, 3)
+        XCTAssertEqual(world.eggs.count, World.maxSlots - 1)
         XCTAssertEqual(world[pet: id]!.contentTime, 6 * hour, "capped while waiting for a slot")
         world.eggs.removeLast()
         world.tick(dt: 1)
-        XCTAssertEqual(world.eggs.count, 3)
+        XCTAssertEqual(world.eggs.count, World.maxSlots - 1)
         XCTAssertEqual(world[pet: id]!.contentTime, 0)
         XCTAssertEqual(world.eggs.last?.genes.parentName, world[pet: id]!.name)
         XCTAssertEqual(world.eggs.last?.genes.generation, 2)

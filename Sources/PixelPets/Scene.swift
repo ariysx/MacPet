@@ -93,8 +93,9 @@ enum SceneBuilder {
         }
 
         for pet in world.pets {
+            guard let region = regions.readyRegion(for: pet.id) else { continue }
             let (petItem, weaponItem, hit) = petItems(pet, clock: clock, time: time, groundY: groundY, playMode: playMode,
-                                                      atlas: atlas, region: regions.region(for: pet.id))
+                                                      atlas: atlas, region: region)
             entries.append((petItem, hit, 4))
             if let weaponItem { entries.append((weaponItem, nil, 4)) }
         }
@@ -170,8 +171,10 @@ enum SceneBuilder {
                                  atlas: SpriteAtlas, region: Int) -> (SceneItem, SceneItem?, HitBox) {
         let baby = pet.stage == .baby
         let anim = animation(for: pet, clock: clock)
-        let frame: Int
-        if anim == .attack {
+        var frame: Int
+        if let air = airFrame(pet) {
+            frame = air
+        } else if anim == .attack {
             frame = min(anim.frameCount - 1, Int((clock - pet.lastAttackAt) * anim.fps))
         } else {
             frame = Int(time * anim.fps) % anim.frameCount
@@ -218,8 +221,17 @@ enum SceneBuilder {
         return (item, weaponItem, hit)
     }
 
+    /// Hop frames for flight: stretched rising, tucked falling, crouched on landing.
+    static func airFrame(_ pet: Pet) -> Int? {
+        if pet.held { return nil }
+        if pet.isFalling { return pet.vy > 60 ? 1 : pet.vy < -60 ? 4 : 3 }
+        if pet.landSquash > 0 { return 0 }
+        return nil
+    }
+
     static func animation(for pet: Pet, clock: Double) -> PetAnim {
         if pet.held { return .held }
+        if airFrame(pet) != nil { return .hop }
         if pet.hurtFlash > 0 { return .hurt }
         if pet.isAsleep { return .sleep }
         if pet.isEating { return .eat }

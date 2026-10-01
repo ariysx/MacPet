@@ -105,8 +105,16 @@ struct Pet: Codable, Identifiable {
 
     // Interaction and fights. Reset on load (see World.resetTransientState).
     var held = false
-    /// Grid pixels above the ground line while held or falling.
+    /// Units above the ground line while held or in the air.
     var height: Double = 0
+    /// Velocity while thrown, falling or bouncing (units per second).
+    var vx: Double = 0
+    var vy: Double = 0
+    /// Where the pointer is holding it; the pet springs toward this.
+    var heldTargetX: Double = 0
+    var heldTargetHeight: Double = 0
+    /// Counts down after landing, for a squash frame.
+    var landSquash: Double = 0
     var foodTarget: UUID?
     var eatingRemaining: Double = 0
     var pendingMeal: Double = 0
@@ -133,7 +141,8 @@ struct Pet: Codable, Identifiable {
 
     var stage: LifeStage { LifeStage.of(age: age) }
     var isAsleep: Bool { sleep != .awake }
-    var isFalling: Bool { !held && height > 0 }
+    /// In the air: thrown, falling or bouncing.
+    var isFalling: Bool { !held && (height > 0 || vy > 0) }
     var isEating: Bool { eatingRemaining > 0 }
 
     func hasBuff(_ kind: BuffKind) -> Bool { buffs.contains { $0.kind == kind } }

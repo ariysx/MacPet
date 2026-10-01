@@ -40,6 +40,11 @@ Status: built. The original spec (approved 2026-09-30) is below, with the change
 - **Landscape** restyled: three-tone cumulus clouds, dithered sky bands, a distant ridge with snow and diagonal light, a pine treeline, bushes, a big oak, and a meadow with horizontal grass strokes. About one night in three has an aurora.
 - **Background images:** pictures in `~/Library/Application Support/PixelPets/Backgrounds/` can replace the drawn landscape (Background menu), cropped to fill and tinted for the time of day.
 
+### Throwing and the family size
+
+- Up to **10** pets and eggs (was 4). The scene limit is 32 items; the atlas holds 10 pet regions, and new pets' frames are composed on a background thread.
+- **Throw physics:** a held pet springs toward the pointer; letting go keeps that velocity. Pets fly under gravity with light air drag, rebound off the screen edges, bounce on landing (with a squash frame), and settle. A pet thrown into a monster joins the fight with a double-damage first hit. Hard landings please Brave pets and upset Timid ones. The simulation ticks at 30 Hz so flight is smooth.
+
 ### Other changes
 
 - **Scene item limit is 24, not 12**, to fit weapons, loot and the chest.

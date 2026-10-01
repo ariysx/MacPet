@@ -352,7 +352,7 @@ final class PetsView: MTKView {
         if app.playUI.mouseUp(at: app.playUI.toCanvas(p), grid: p, hits: lastFrame.hits, world: &app.world) { return }
         guard let pr = press, case .pet(let id) = pr.target else { return }
         if pr.pickedUp {
-            app.world.drop(id: id, x: worldX(p), height: heldHeight(p))
+            app.world.throwHeld(id: id)
         } else if !pr.rubbed {
             app.world.petPet(id: id)
         }

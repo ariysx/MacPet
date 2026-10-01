@@ -38,7 +38,7 @@ struct UIUniforms {
     uint3  pad;
 };
 
-constant uint kMaxItems = 24;
+constant uint kMaxItems = 32;
 constant uint kAtlasColumns = 16;
 constant float kTile = 64.0;
 

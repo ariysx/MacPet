@@ -125,7 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         registerHotKey()
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
-        let sim = Timer(timeInterval: 0.1, target: self, selector: #selector(simTick), userInfo: nil, repeats: true)
+        // 30 Hz, so thrown pets fly smoothly.
+        let sim = Timer(timeInterval: 1.0 / 30, target: self, selector: #selector(simTick), userInfo: nil, repeats: true)
         RunLoop.main.add(sim, forMode: .common)
         let saver = Timer(timeInterval: 30, target: self, selector: #selector(autosave), userInfo: nil, repeats: true)
         RunLoop.main.add(saver, forMode: .common)
@@ -162,10 +163,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateStatusIcon()
     }
 
+    /// Composes new pets' sprites on a background thread (about half a second each), then
+    /// writes them into the atlas on the main thread. Pets show up once their frames are ready.
     private func syncSprites() {
-        guard let renderer else { return }
-        if regions.sync(pets: world.pets, atlas: &renderer.atlas) {
-            renderer.uploadAtlas()
+        guard renderer != nil else { return }
+        regions.releaseGone(world.pets)
+        for pet in world.pets where !regions.isAssigned(pet.id) {
+            guard let region = regions.reserve(pet.id) else { continue }
+            let id = pet.id, looks = pet.looks
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let frames = PetComposer.frames(for: looks)
+                await MainActor.run {
+                    guard let self, let renderer = self.renderer, self.regions.isReserved(id, region: region) else { return }
+                    renderer.atlas.write(frames, region: region)
+                    self.regions.markReady(id)
+                    renderer.uploadAtlas()
+                }
+            }
         }
     }
 

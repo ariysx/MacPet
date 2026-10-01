@@ -14,9 +14,9 @@ struct SceneUniforms {          // buffer(0)
     var background: SIMD3<UInt32> = .zero // x: 1 image, 2 aurora tonight; y, z: image size
 }
 
-struct SceneItem {              // buffer(1), array of up to 24
-    // 4 pets + 4 weapons + monster + 6 pellets + smoke + loot, with room to spare.
-    static let maxCount = 24
+struct SceneItem {              // buffer(1), array of up to 32
+    // 10 pets + 10 weapons + monster + 6 pellets + smoke + loot, with a little room to spare.
+    static let maxCount = 32
 
     struct Flags: OptionSet {
         let rawValue: UInt32
