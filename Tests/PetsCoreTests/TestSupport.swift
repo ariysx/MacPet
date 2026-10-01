@@ -19,6 +19,7 @@ func makeWorld(hour localHour: Double = 12, seed: UInt64 = 7) -> World {
     var world = World(seed: seed)
     world.localHour = { localHour }
     world.monsterSpawnChance = 0
+    world.critChance = 0
     world.now = { Date(timeIntervalSince1970: 1_790_000_000) }
     return world
 }

@@ -28,7 +28,8 @@ final class HealthTests: XCTestCase {
         ]
         for traits in combos {
             var world = makeWorld()
-            addPet(&world, traits: traits, name: "Neglected")
+            let id = addPet(&world, traits: traits, name: "Neglected")
+            world.update(id) { $0.contentTime = -.infinity } // never lays, so it stays alone
             var hours = 0.0
             while world.graveyard.isEmpty && hours < 100 {
                 world.advance(by: hour)
@@ -96,7 +97,7 @@ final class PopulationTests: XCTestCase {
         XCTAssertEqual(world.pets.count, 1)
         XCTAssertEqual(world.hatchedCount, 1)
         XCTAssertEqual(world.nextHatchDuration, 19 * 60)
-        guard case .hatched = world.events.last else { return XCTFail("no hatch event") }
+        XCTAssertTrue(world.events.contains { if case .hatched = $0 { return true } else { return false } }, "no hatch event")
     }
 
     func testDeathLeavesGraveThatBecomesEgg() {
@@ -118,17 +119,17 @@ final class PopulationTests: XCTestCase {
         XCTAssertEqual(world.eggs.count, 1)
     }
 
-    func testLayingNeedsSixHoursContentAndAFreeSlot() {
+    func testLayingNeedsLayTimeContentAndAFreeSlot() {
         var world = makeWorld()
         let id = addPet(&world)
-        world.update(id) { $0.contentTime = 6 * hour - 5 }
+        world.update(id) { $0.contentTime = Pet.layTime - 5 }
         world.advance(by: 3)
         XCTAssertTrue(world.eggs.isEmpty)
         // Fill every other slot.
         for k in 1..<World.maxSlots { world.addEgg(at: Double(20 + k * 25), genes: nil) }
         world.advance(by: 5)
         XCTAssertEqual(world.eggs.count, World.maxSlots - 1)
-        XCTAssertEqual(world[pet: id]!.contentTime, 6 * hour, "capped while waiting for a slot")
+        XCTAssertEqual(world[pet: id]!.contentTime, Pet.layTime, "capped while waiting for a slot")
         world.eggs.removeLast()
         world.tick(dt: 1)
         XCTAssertEqual(world.eggs.count, World.maxSlots - 1)

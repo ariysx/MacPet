@@ -57,8 +57,10 @@ final class RarityTests: XCTestCase {
 final class ItemTests: XCTestCase {
     func testCategories() {
         XCTAssertEqual(Item.allCases.filter { $0.category == .weapon }.count, 6)
-        XCTAssertEqual(Item.allCases.filter { $0.category == .relic }.count, 8)
+        XCTAssertEqual(Item.allCases.filter { $0.category == .relic }.count, 9)
         XCTAssertEqual(Item.allCases.filter { $0.category == .potion }.count, 10)
+        XCTAssertEqual(Item.allCases.filter { $0.category == .special }.count, 3)
+        XCTAssertFalse(Item.lootable.contains { $0.category == .special })
         XCTAssertTrue(Item.allCases.filter { $0.category == .weapon }.allSatisfy { $0.attackBonus > 0 })
     }
 
@@ -216,8 +218,10 @@ final class ItemTests: XCTestCase {
 
     func testLuckyCloverAddsARoll() {
         var random = SeededRandom(seed: 1)
-        XCTAssertEqual(LootTable.monsterLoot(.bat, lucky: false, &random).count, 2)
-        XCTAssertEqual(LootTable.monsterLoot(.bat, lucky: true, &random).count, 3)
+        let plain = LootTable.monsterLoot(.bat, lucky: false, &random).filter { $0.category != .special }
+        let lucky = LootTable.monsterLoot(.bat, lucky: true, &random).filter { $0.category != .special }
+        XCTAssertEqual(plain.count, 2)
+        XCTAssertEqual(lucky.count, 3)
     }
 
     func testOneDailyChestPerDay() {
@@ -229,12 +233,12 @@ final class ItemTests: XCTestCase {
         XCTAssertEqual(world.loot.filter { $0.kind == .dailyChest }.count, 1)
         XCTAssertTrue(world.events.contains(.dailyChestArrived))
         let chest = world.loot[0]
-        XCTAssertEqual(chest.items.count, 3)
+        XCTAssertEqual(chest.items.filter { $0.category != .special }.count, 3)
         XCTAssertTrue(chest.items.contains { $0.rarity >= .uncommon })
         world.collectLoot(id: chest.id)
         world.advance(by: 2 * hour)
         XCTAssertTrue(world.loot.isEmpty, "only one per day")
-        XCTAssertEqual(world.inventory.values.reduce(0, +), 3)
+        XCTAssertEqual(world.inventory.values.reduce(0, +), chest.items.count)
         date = date.addingTimeInterval(day)
         world.tick(dt: 1)
         XCTAssertEqual(world.loot.count, 1, "a new day brings a new chest")

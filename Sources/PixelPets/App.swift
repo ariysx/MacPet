@@ -327,13 +327,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Play mode
 
+    /// Apps hidden when play mode started, and the one that was in front, to bring back after.
+    private var hiddenForPlay: [NSRunningApplication] = []
+    private var frontBeforePlay: NSRunningApplication?
+
+    /// Hides every other app's windows for play mode, and on the way out shows exactly those
+    /// again, with the app that was in front back in front. Apps the user had hidden stay hidden.
+    private func clearDesk(_ on: Bool) {
+        if on {
+            guard UserDefaults.standard.object(forKey: "hideAppsInPlay") as? Bool ?? true else { return }
+            frontBeforePlay = NSWorkspace.shared.frontmostApplication
+            hiddenForPlay = NSWorkspace.shared.runningApplications.filter {
+                $0.activationPolicy == .regular && !$0.isHidden && $0 != NSRunningApplication.current
+            }
+            for app in hiddenForPlay { app.hide() }
+        } else {
+            for app in hiddenForPlay where !app.isTerminated { app.unhide() }
+            hiddenForPlay = []
+            if let front = frontBeforePlay, !front.isTerminated, front != NSRunningApplication.current {
+                front.activate(options: [])
+            }
+            frontBeforePlay = nil
+        }
+    }
+
     @objc func togglePlayMode() {
         setPlayMode(!playMode)
     }
 
     func setPlayMode(_ on: Bool) {
+        let changed = on != playMode
         playMode = on
         noteInput()
+        if changed { clearDesk(on) }
         let mainID = NSScreen.screens.first.flatMap(displayID)
         if on { NSApp.activate(ignoringOtherApps: true) }
         for (id, window) in windows {
@@ -377,7 +403,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func openLoot(id: UUID) {
         guard let loot = world.loot.first(where: { $0.id == id }) else { return }
         let items = world.collectLoot(id: id)
-        playUI.showReveal(title: loot.kind == .dailyChest ? "DAILY CHEST!" : "LOOT!", items: items,
+        let title: String
+        switch loot.kind {
+        case .dailyChest: title = world.dailyStreak > 1 ? "DAILY CHEST! DAY \(world.dailyStreak)" : "DAILY CHEST!"
+        case .reward: title = "PETDEX REWARD!"
+        case .bag: title = "LOOT!"
+        }
+        playUI.showReveal(title: title, items: items,
                           atGridX: Float(loot.x) * SceneBuilder.worldScale)
         flushEvents()
     }
@@ -403,6 +435,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .lootCollected(let items, _): toast("+\(items.count) items", ink: PlayUI.ink(.uncommon))
         case .needsCare(let name, let reason): toast(reason == .starving ? "\(name) is starving!" : "\(name) is sick",
                                                      ink: Ink.make(.red, .light), pet: name)
+        case .levelUp(let name, let level): toast("level up! \(name) is lv \(level)", ink: Ink.make(.blue, .light), pet: name)
+        case .discovered(let name, let entries):
+            toast("new in dex: " + entries.prefix(2).joined(separator: ", ") + (entries.count > 2 ? " +\(entries.count - 2)" : ""),
+                  ink: Ink.make(.purple, .light), pet: name)
+        case .dexReward(let found): toast("\(found) found! a petdex chest dropped", ink: Ink.make(.purple, .light))
+        case .weaponBroke(let name, let item): toast("\(name)'s \(item.title) broke!", ink: Ink.make(.red, .light), pet: name)
         }
         notify(event)
     }
@@ -433,7 +471,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if fromChest || (best?.rarity ?? .common) >= .rare {
                 notify(fromChest ? "Daily chest opened" : "Loot!", items.map { "\($0.title) (\($0.rarity.title))" }.joined(separator: ", "))
             }
-        case .monsterDefeated, .monsterAte:
+        case .dexReward(let found):
+            notify("Petdex milestone", "\(found) of \(DexEntry.total) found. A reward chest dropped.")
+        case .weaponBroke(let name, let item):
+            notify("\(item.title) broke", "\(name) needs a new weapon from the Bag.")
+        case .monsterDefeated, .monsterAte, .levelUp, .discovered:
             break
         }
     }
@@ -499,10 +541,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         play.state = playMode ? .on : .off
         menu.addItem(play)
 
-        let chests = world.loot.filter { $0.kind == .dailyChest }
+        let chests = world.loot.filter { $0.kind != .bag }
         let bags = world.loot.filter { $0.kind == .bag }
         for chest in chests {
-            menu.addItem(action("Open Daily Chest") { [unowned self] in
+            menu.addItem(action(chest.kind == .reward ? "Open Petdex Chest" : "Open Daily Chest") { [unowned self] in
                 if !playMode { setPlayMode(true) }
                 openLoot(id: chest.id)
             })
@@ -565,7 +607,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(rate)
         let notes = action("Notifications") { [unowned self] in defaults.set(!notificationsOn, forKey: Key.notifications) }
         notes.state = notificationsOn ? .on : .off
+        let hideApps = defaults.object(forKey: "hideAppsInPlay") as? Bool ?? true
+        let hide = action("Hide Other Apps in Play Mode") { [unowned self] in self.defaults.set(!hideApps, forKey: "hideAppsInPlay") }
+        hide.state = hideApps ? .on : .off
         menu.addItem(notes)
+        menu.addItem(hide)
         let login = action("Launch at Login") { [unowned self] in toggleLaunchAtLogin() }
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)

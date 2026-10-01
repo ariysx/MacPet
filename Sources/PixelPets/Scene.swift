@@ -92,6 +92,11 @@ enum SceneBuilder {
                 item.tile = atlas.tile(.chest)
                 item.primary = PetPalette.rgba(0xA0673A)
                 item.secondary = PetPalette.rgba(0xF2C14E)
+            case .reward:
+                // The Petdex chest: violet wood, gold bands.
+                item.tile = atlas.tile(.chest)
+                item.primary = PetPalette.rgba(0x7B4FB8)
+                item.secondary = PetPalette.rgba(0xF2C14E)
             case .bag:
                 item.tile = atlas.tile(.bag)
                 item.primary = PetPalette.rgba(0xE8D3A6)

@@ -61,6 +61,19 @@ enum MonsterKind: String, Codable, CaseIterable {
         }
     }
     var isBig: Bool { self == .ogre || self == .golem }
+    /// Chance a win drops a Mystery Egg, and a Shiny Egg.
+    var eggChance: Double {
+        switch self {
+        case .slime, .shroomling: return 0.06
+        case .bat, .wolf: return 0.12
+        case .wisp: return 0.18
+        case .ogre: return 0.4
+        case .golem: return 0.5
+        }
+    }
+    var shinyEggChance: Double { self == .golem ? 0.25 : self == .ogre ? 0.1 : self == .wisp ? 0.03 : 0 }
+    /// Experience for each pet that landed a hit.
+    var xp: Double { maxHealth / 2 }
     var flies: Bool { self == .bat || self == .wisp }
     /// How close it has to be to hit a pet.
     var reach: Double { isBig ? 14 : 10 }
@@ -113,6 +126,10 @@ struct CombatHit: Equatable {
     var damage: Double
     /// True when the monster was hit; false when a pet was.
     var onMonster: Bool
+    /// A critical hit, a heavy blow from a big monster, or the blow that finished the fight.
+    var crit = false
+    var heavy = false
+    var finishing = false
 }
 
 enum Combat {
@@ -122,10 +139,13 @@ enum Combat {
     static let leaveTimeout: Double = 300
     static let playerDamage: Double = 5
     static let playerCooldown: Double = 0.4
+    static let critChance: Double = 0.12
+    static let critMultiplier: Double = 1.8
 
     /// Damage of one pet hit, before the thrown-in double.
     static func attackDamage(for pet: Pet, alliesInFight: Int) -> Double {
         var damage = 4 + 4 * (pet.hunger / 100) + min(Double(pet.wins) * 0.5, 6) + (pet.weapon?.attackBonus ?? 0)
+            + Double(pet.level - 1) * 0.4
         if pet.stage == .baby { damage *= 0.5 }
         if pet.hasBuff(.strength) { damage *= 1.5 }
         if pet.traits.sociality == .social && alliesInFight > 0 { damage *= Traits.socialAttackMultiplier }
@@ -152,8 +172,8 @@ extension World {
 
         guard var m = monster else {
             monsterSpawnTimer += dt
-            if monsterSpawnTimer >= 3600 {
-                monsterSpawnTimer -= 3600
+            if monsterSpawnTimer >= World.monsterCheckInterval {
+                monsterSpawnTimer -= World.monsterCheckInterval
                 if !night && !pets.isEmpty && random.chance(monsterSpawnChance) {
                     let kind = MonsterKind.roll(&random)
                     spawnMonster(kind: kind, fromLeft: random.coin())
@@ -208,24 +228,29 @@ extension World {
                 damage *= 2
                 pets[i].thrownBonus = false
             }
+            let crit = critChance > 0 && random.chance(critChance + (pets[i].relic == .luckyClover ? 0.08 : 0))
+            if crit { damage *= Combat.critMultiplier }
             m.health -= damage
-            hits.append(CombatHit(x: (m.x + pets[i].x) / 2, height: 8, damage: damage, onMonster: true))
+            hits.append(CombatHit(x: (m.x + pets[i].x) / 2, height: 8, damage: damage, onMonster: true, crit: crit))
             m.x += (m.x > pets[i].x ? 1 : -1) * 1.5 // a little knockback
             m.hurtFlash = 0.2
             m.sinceLastHit = 0
             pets[i].landedHit = true
+            wearWeapon(petIndex: i)
             pets[i].lastAttackAt = clock
             pets[i].attackCooldown = pets[i].attackInterval
         }
 
         if m.health <= 0 {
             smoke = SmokePuff(x: m.x, y: 0)
+            if let last = hits.indices.last, hits[last].onMonster { hits[last].finishing = true }
             let winners = pets.indices.filter { pets[$0].landedHit }
             if !winners.isEmpty { dropMonsterLoot(m.kind, at: m.x, winners: winners) }
             for i in winners {
                 pets[i].happiness = min(100, pets[i].happiness + 25)
                 pets[i].excitedRemaining = 20
                 pets[i].wins += 1
+                gainXP(petIndex: i, m.kind.xp)
             }
             events.append(.monsterDefeated(m.kind))
             monster = nil
@@ -245,7 +270,7 @@ extension World {
                 let damage = m.kind.damage * (pets[target].relic == .guardianShell ? 0.6 : 1)
                 pets[target].health -= damage
                 pets[target].hurtFlash = 0.3
-                hits.append(CombatHit(x: pets[target].x, height: 10, damage: damage, onMonster: false))
+                hits.append(CombatHit(x: pets[target].x, height: 10, damage: damage, onMonster: false, heavy: m.kind.isBig))
                 // Knocked back: a hop away from the monster, then it comes back in.
                 pets[target].vx = (pets[target].x < m.x ? -1 : 1) * 70
                 pets[target].vy = 110

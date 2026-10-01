@@ -173,6 +173,11 @@ final class PlayUI {
     var pointer: SIMD2<Int>?
     var gridPointer: SIMD2<Float>?
     var pinnedPet: UUID?
+    /// F is held: the pointer shows food.
+    var feeding = false
+    private(set) var dexOpen = false
+    private var dexButton: UIRect?
+    private var dexRect: UIRect?
     private(set) var dragging: Item?
     private var pressed: (item: Item, at: SIMD2<Int>)?
     private var page = 0
@@ -227,12 +232,17 @@ final class PlayUI {
         canvas.clear()
         let w = canvas.width, h = canvas.height
 
-        // Controls hint.
-        let hint = dragging == nil ? "DRAG ITEMS ONTO PETS   F+CLICK: FEED   RIGHT-CLICK: PET INFO   ESC: EXIT"
-                                   : "DROP ON A PET" + (dragging!.targetsEgg ? " EGG" : "")
-        let hw = PixelFont.width(hint) + 10
-        canvas.panel(UIRect(x: (w - hw) / 2, y: 4, w: hw, h: 13))
-        canvas.text(hint, (w - hw) / 2 + 5, 7, PlayUI.grey)
+        // Controls, as pictograms with a word each.
+        if let item = dragging {
+            let word = item.category == .special ? "DROP ON THE GROUND" : item.targetsEgg ? "DROP ON AN EGG" : "DROP ON A PET"
+            drawHints([([UIIcon.dropDown.sprite], word)])
+        } else {
+            drawHints([([UIIcon.mouseLeft.sprite], "PET"),
+                       ([UIIcon.openHand.sprite], "THROW"),
+                       ([UIIcon.key("F"), UIIcon.mouseLeft.sprite], "FEED"),
+                       ([UIIcon.mouseRight.sprite], "INFO"),
+                       ([UIIcon.key("ESC")], "EXIT")])
+        }
 
         // Name tag over the pet under the pointer, or a drop highlight while dragging.
         if let gp = gridPointer, let hit = hits.first(where: { $0.contains(gp) }) {
@@ -242,36 +252,69 @@ final class PlayUI {
                 let r = UIRect(x: top.x - 2, y: top.y - 2, w: max(1, right.x - top.x + 4), h: max(1, right.y - top.y + 4))
                 for x in r.x..<(r.x + r.w) where x % 2 == 0 { canvas.put(x, r.y, PlayUI.white); canvas.put(x, r.y + r.h - 1, PlayUI.white) }
                 for y in r.y..<(r.y + r.h) where y % 2 == 0 { canvas.put(r.x, y, PlayUI.white); canvas.put(r.x + r.w - 1, y, PlayUI.white) }
-            } else if let (label, ink) = PlayUI.label(for: hit.target, in: world) {
-                let lw = PixelFont.width(label) + 8
-                let left = min(max(2, (top.x + right.x) / 2 - lw / 2), canvas.width - lw - 2)
-                let tagY = min(max(20, top.y - 18), canvas.height - 50)
-                canvas.panel(UIRect(x: left, y: tagY, w: lw, h: 13))
-                canvas.text(label, left + 4, tagY + 3, ink)
             } else if case .pet(let id) = hit.target, let pet = world.pets.first(where: { $0.id == id }), pinnedPet != id {
-                let label = "\(pet.name)  " + String(repeating: "★", count: pet.looks.rarity.rawValue + 1)
+                let level = "LV\(pet.level)"
+                let stars = String(repeating: "★", count: pet.looks.rarity.rawValue + 1)
+                let label = "\(pet.name) \(level) " + stars
                 let lw = PixelFont.width(label) + 8
                 let left = min(max(2, (top.x + right.x) / 2 - lw / 2), canvas.width - lw - 2)
                 let tagY = min(max(20, top.y - 26), canvas.height - 50)
                 canvas.panel(UIRect(x: left, y: tagY, w: lw, h: 13))
                 canvas.text(pet.name.uppercased(), left + 4, tagY + 3, PlayUI.white)
-                let starX = left + 4 + PixelFont.width(pet.name + "  ") + 1
-                canvas.text(String(repeating: "★", count: pet.looks.rarity.rawValue + 1), starX, tagY + 3,
-                            PlayUI.ink(pet.looks.rarity))
+                let levelX = left + 4 + PixelFont.width(pet.name + " ") + 1
+                canvas.text(level, levelX, tagY + 3, Ink.make(.blue, .light))
+                canvas.text(stars, levelX + PixelFont.width(level + " ") + 1, tagY + 3, PlayUI.ink(pet.looks.rarity))
             }
         }
 
         drawBag(world: world)
         let colours = drawCard(world: world, atlas: atlas, regions: regions)
+        drawDex(world: world)
         drawReveal()
         drawToasts()
 
-        // The item being dragged follows the pointer.
+        // The item being dragged follows the pointer; otherwise a badge by the pointer shows what
+        // a click or drag would do there.
         if let item = dragging, let p = pointer, let icon = icons[item] {
             canvas.sprite(icon, p.x - 8, p.y - 8)
+        } else if let p = pointer, !overPanel(p) {
+            let target = gridPointer.flatMap { gp in hits.first { $0.contains(gp) }?.target }
+            let holding = world.pets.contains { $0.held }
+            if let (icon, text, ink) = PlayUI.badge(for: target, in: world, feeding: feeding, holding: holding) {
+                let bx = p.x + 7, by = p.y + 8
+                let tw = text.map { PixelFont.width($0) + 3 } ?? 0
+                if text != nil || icon.width > 0 {
+                    canvas.panel(UIRect(x: bx - 3, y: by - 3, w: icon.width + tw + 6, h: max(icon.height, 7) + 6))
+                }
+                canvas.sprite(icon, bx, by)
+                if let text { canvas.text(text, bx + icon.width + 3, by + (icon.height - 7) / 2, ink) }
+            }
         }
         _ = h
         return colours
+    }
+
+    /// Pictogram hints along the top: icons, then a word, for each control.
+    private func drawHints(_ entries: [([PixelSprite], String)]) {
+        let gap = 12
+        let widths = entries.map { e in e.0.reduce(0) { $0 + $1.width + 2 } + PixelFont.width(e.1) + 1 }
+        let total = widths.reduce(0, +) + gap * (entries.count - 1) + 12
+        let r = UIRect(x: (canvas.width - total) / 2, y: 3, w: total, h: 17)
+        canvas.panel(r)
+        var x = r.x + 6
+        for (k, e) in entries.enumerated() {
+            for icon in e.0 {
+                canvas.sprite(icon, x, r.y + (r.h - icon.height) / 2)
+                x += icon.width + 2
+            }
+            canvas.text(e.1, x + 1, r.y + 5, PlayUI.grey)
+            x += widths[k] - e.0.reduce(0) { $0 + $1.width + 2 } + gap
+        }
+    }
+
+    private func overPanel(_ p: SIMD2<Int>) -> Bool {
+        bar.contains(p) || (card?.contains(p) ?? false) || (dexRect?.contains(p) ?? false)
+            || (dexButton?.contains(p) ?? false) || (revealRect?.contains(p) ?? false)
     }
 
     private func drawBag(world: World) {
@@ -284,6 +327,24 @@ final class PlayUI {
         let barW = max(150, shown.count * 22 + 50)
         bar = UIRect(x: (w - barW) / 2, y: h - 31, w: barW, h: 28)
         canvas.panel(bar)
+
+        // Petdex button, left of the bag.
+        let db = UIRect(x: bar.x - 58, y: bar.y, w: 54, h: 28)
+        dexButton = db
+        let dexHover = pointer.map(db.contains) ?? false
+        canvas.panel(db, border: dexHover || dexOpen ? .purple : .dark)
+        canvas.sprite(UIIcon.book.sprite, db.x + 5, db.y + 4)
+        canvas.text("DEX", db.x + 18, db.y + 5, PlayUI.grey)
+        canvas.text("\(world.dex.count)/\(DexEntry.total)", db.x + 5, db.y + 16, Ink.make(.purple, .light))
+        if world.dailyStreak > 1 {
+            let streak = "\(world.dailyStreak)"
+            let sx = bar.x + bar.w + 4
+            let sr = UIRect(x: sx, y: bar.y, w: PixelFont.width(streak) + 20, h: 28)
+            canvas.panel(sr, border: .red)
+            canvas.sprite(UIIcon.flame.sprite, sr.x + 5, sr.y + 4)
+            canvas.text(streak, sr.x + 14, sr.y + 6, Ink.make(.gold, .light))
+            canvas.text("DAY", sr.x + 4, sr.y + 16, PlayUI.grey)
+        }
         canvas.text("BAG", bar.x + 6, bar.y + 4, PlayUI.grey)
         canvas.text("\(world.inventory.values.reduce(0, +))", bar.x + 6, bar.y + 15, PlayUI.white)
         slots = []
@@ -320,7 +381,8 @@ final class PlayUI {
                 (item.title.uppercased(), PlayUI.ink(item.rarity)),
                 (String(repeating: "★", count: item.rarity.rawValue + 1) + " " + item.rarity.title.uppercased(), PlayUI.ink(item.rarity)),
                 (item.blurb.uppercased(), PlayUI.white),
-                (item.targetsEgg ? "DRAG ONTO AN EGG" : item.category == .potion ? "DRAG ONTO A PET TO USE" : "DRAG ONTO A PET TO EQUIP",
+                (item.category == .special ? "DRAG ONTO THE GROUND" : item.targetsEgg ? "DRAG ONTO AN EGG"
+                    : item.category == .potion ? "DRAG ONTO A PET TO USE" : "DRAG ONTO A PET TO EQUIP",
                  PlayUI.grey),
             ]
             let tw = (lines.map { PixelFont.width($0.0) }.max() ?? 0) + 12
@@ -352,7 +414,11 @@ final class PlayUI {
         canvas.text(pet.name.uppercased(), tx, r.y + 6, PlayUI.white)
         canvas.text(String(repeating: "★", count: pet.looks.rarity.rawValue + 1) + " " + pet.looks.rarity.title.uppercased(),
                     tx, r.y + 16, PlayUI.ink(pet.looks.rarity))
-        canvas.text("GEN \(pet.generation)  \(pet.stage.rawValue.uppercased())", tx, r.y + 26, PlayUI.grey)
+        canvas.text("LV\(pet.level)", tx, r.y + 26, Ink.make(.blue, .light))
+        canvas.text("GEN \(pet.generation)  \(pet.stage.rawValue.uppercased())", tx + PixelFont.width("LV\(pet.level) ") + 2, r.y + 26, PlayUI.grey)
+        // Experience toward the next level, under the portrait.
+        canvas.fill(UIRect(x: r.x + 5, y: r.y + 43, w: 36, h: 3), Ink.make(.dark, .outline))
+        canvas.fill(UIRect(x: r.x + 5, y: r.y + 43, w: Int(36 * pet.levelProgress), h: 3), Ink.make(.blue, .light))
         canvas.text(pet.looks.shape.rawValue.uppercased() + " " + pet.feeling.title.uppercased(), tx, r.y + 36, PlayUI.grey)
         let close = UIRect(x: r.x + r.w - 11, y: r.y + 4, w: 8, h: 9)
         canvas.text("×", close.x + 1, close.y + 1, PlayUI.white)
@@ -444,22 +510,59 @@ final class PlayUI {
         }
     }
 
-    /// What to call things on the ground when hovered. Pets get their own name tag.
-    static func label(for target: HitBox.Target, in world: World) -> (String, UInt8)? {
+    /// The pictogram by the pointer: what a click or drag does on whatever is under it.
+    static func badge(for target: HitBox.Target?, in world: World, feeding: Bool, holding: Bool) -> (PixelSprite, String?, UInt8)? {
+        if holding { return (UIIcon.grabHand.sprite, nil, PlayUI.white) }
+        if feeding { return (UIIcon.apple.sprite, nil, PlayUI.white) }
         switch target {
-        case .pet:
-            return nil
-        case .pellet:
-            return ("FOOD", PlayUI.white)
-        case .egg(let id):
+        case .pet?:
+            return (UIIcon.openHand.sprite, nil, PlayUI.white)
+        case .egg(let id)?:
             guard let egg = world.eggs.first(where: { $0.id == id }) else { return nil }
-            return ("EGG: HATCHES IN \(Int(ceil(egg.remaining / 60))) MIN", Ink.make(.gold, .light))
-        case .loot(let id):
-            guard let loot = world.loot.first(where: { $0.id == id }) else { return nil }
-            return (loot.kind == .dailyChest ? "DAILY CHEST: CLICK TO OPEN" : "LOOT: CLICK TO OPEN", Ink.make(.gold, .light))
-        case .monster:
-            guard let m = world.monster else { return nil }
-            return ("\(m.kind.rawValue.uppercased()): CLICK TO HIT", Ink.make(.red, .light))
+            return (UIIcon.hourglass.sprite, "\(Int(ceil(egg.remaining / 60)))M", Ink.make(.gold, .light))
+        case .loot?:
+            return (UIIcon.pointHand.sprite, nil, PlayUI.white)
+        case .monster?:
+            return (UIIcon.sword.sprite, nil, PlayUI.white)
+        case .pellet?, nil:
+            return nil
+        }
+    }
+
+    // MARK: Petdex
+
+    private func drawDex(world: World) {
+        dexRect = nil
+        guard dexOpen else { return }
+        let sections = DexEntry.sections
+        let colW = 104, rowH = 9
+        let rows = sections.map(\.entries.count).max() ?? 0
+        let r = UIRect(x: (canvas.width - colW * sections.count - 12) / 2, y: 24,
+                       w: colW * sections.count + 12, h: min(canvas.height - 60, rows * rowH + 40))
+        dexRect = r
+        canvas.panel(r, border: .purple)
+        let next = (world.dexRewards + 1) * World.dexMilestone
+        let title = "PETDEX \(world.dex.count)/\(DexEntry.total)"
+        canvas.sprite(UIIcon.book.sprite, r.x + 6, r.y + 5)
+        canvas.text(title, r.x + 19, r.y + 7, Ink.make(.purple, .light))
+        let goal = "NEXT REWARD CHEST AT \(next)"
+        canvas.text(goal, r.x + r.w - PixelFont.width(goal) - 16, r.y + 7, PlayUI.grey)
+        canvas.text("×", r.x + r.w - 11, r.y + 5, PlayUI.white)
+        let maxRows = (r.h - 36) / rowH
+        for (c, section) in sections.enumerated() {
+            let x = r.x + 8 + c * colW
+            let found = section.entries.filter { world.knows($0) }.count
+            canvas.text("\(section.title) \(found)/\(section.entries.count)", x, r.y + 20, PlayUI.white)
+            for (k, entry) in section.entries.prefix(maxRows).enumerated() {
+                let y = r.y + 31 + k * rowH
+                if world.knows(entry) {
+                    canvas.fill(UIRect(x: x, y: y + 2, w: 3, h: 3), PlayUI.ink(entry.rarity))
+                    canvas.text(entry.title.uppercased(), x + 5, y, PlayUI.ink(entry.rarity))
+                } else {
+                    canvas.fill(UIRect(x: x, y: y + 2, w: 3, h: 3), Ink.make(.stone, .shade))
+                    canvas.text("???", x + 5, y, Ink.make(.stone, .shade))
+                }
+            }
         }
     }
 
@@ -483,6 +586,8 @@ final class PlayUI {
             return true
         }
         if let card, card.contains(p) { return true }
+        if let b = dexButton, b.contains(p) { dexOpen.toggle(); return true }
+        if let d = dexRect, d.contains(p) { dexOpen = false; return true }
         if let r = revealRect, r.contains(p) {
             reveal?.born -= 100 // skip to the end
             return true
@@ -510,10 +615,15 @@ final class PlayUI {
         defer { pressed = nil; dragging = nil }
         guard let item = dragging else {
             if let press = pressed {
-                toast(press.item.targetsEgg ? "drag it onto an egg" : "drag it onto a pet", ink: PlayUI.grey, atGrid: nil)
+                toast(press.item.category == .special ? "drag it onto the ground" : press.item.targetsEgg ? "drag it onto an egg" : "drag it onto a pet",
+                      ink: PlayUI.grey, atGrid: nil)
                 return true
             }
             return false
+        }
+        if item.category == .special {
+            dropSpecial(item, grid: grid, world: &world)
+            return true
         }
         guard let hit = hits.first(where: { $0.contains(grid) }) else { return true }
         let at = SIMD2(grid.x, hit.maxY)
@@ -537,6 +647,24 @@ final class PlayUI {
             break
         }
         return true
+    }
+
+    private func dropSpecial(_ item: Item, grid: SIMD2<Float>, world: inout World) {
+        let x = Double(grid.x / SceneBuilder.worldScale)
+        let at = SIMD2(grid.x, grid.y + 30)
+        let isEgg = item != .warHorn
+        if world.useSpecial(item, at: x) {
+            if isEgg, let egg = world.eggs.last {
+                toast(item == .shinyEgg ? "a shiny egg! \(Int(ceil(egg.remaining / 60))) min" : "an egg! \(Int(ceil(egg.remaining / 60))) min",
+                      ink: PlayUI.ink(item.rarity), atGrid: at)
+            } else {
+                toast("awooo!", ink: Ink.make(.red, .light), atGrid: at)
+            }
+        } else if isEgg {
+            toast("no room: \(World.maxSlots) pets and eggs max", ink: PlayUI.grey, atGrid: at)
+        } else {
+            toast(world.pets.isEmpty ? "no pets to fight" : "a fight is already on", ink: PlayUI.grey, atGrid: at)
+        }
     }
 
     /// Right-click: pin the card of the pet under the pointer, or close it.

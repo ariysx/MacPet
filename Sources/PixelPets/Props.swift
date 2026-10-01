@@ -679,6 +679,27 @@ enum ItemArt {
                     Part(.ellipse(c: V2(21, 18), r: V2(5, 5), angle: 0), .green, z: 0, group: 2),
                     Part(.ellipse(c: V2(16, 23), r: V2(5, 5), angle: 0), .green, z: 0.1, group: 3),
                     Part(.ellipse(c: V2(16, 13), r: V2(5, 5), angle: 0), .green, z: 0.2, group: 4)]
+        case .mysteryEgg:
+            return [Part(.ellipse(c: V2(16, 15), r: V2(9.5, 12), angle: 0), .white, z: 0, group: 0),
+                    Part(.ellipse(c: V2(12, 18), r: V2(2.4, 2), angle: 0.3), .green, z: 0.1, group: 0, innerOutline: false),
+                    Part(.ellipse(c: V2(20, 12), r: V2(2, 1.7), angle: 0), .green, z: 0.1, group: 0, innerOutline: false),
+                    Part(.ellipse(c: V2(17, 22), r: V2(1.6, 1.4), angle: 0), .green, z: 0.1, group: 0, innerOutline: false)]
+        case .shinyEgg:
+            return [Part(.ellipse(c: V2(16, 15), r: V2(9.5, 12), angle: 0), .gold, z: 0, group: 0),
+                    Part(.ellipse(c: V2(12, 17), r: V2(2.4, 2), angle: 0.3), .purple, z: 0.1, group: 0, innerOutline: false),
+                    Part(.ellipse(c: V2(20, 11), r: V2(2, 1.7), angle: 0), .purple, z: 0.1, group: 0, innerOutline: false),
+                    Part(.ellipse(c: V2(12, 21), r: V2(1.5, 2.6), angle: 0.4), .white, z: 0.2, group: 0, innerOutline: false, fixedTone: .light)]
+        case .warHorn:
+            return [Part(.capsule(a: V2(7, 21), b: V2(15, 14), ra: 6, rb: 4), .white, z: 0, group: 0),
+                    Part(.capsule(a: V2(15, 14), b: V2(21, 8), ra: 4, rb: 2.6), .white, z: 0.1, group: 1, toneBias: 1),
+                    Part(.capsule(a: V2(21, 8), b: V2(26, 6), ra: 2.6, rb: 1.2), .white, z: 0.2, group: 2, toneBias: 1),
+                    Part(.ellipse(c: V2(6, 22), r: V2(4.2, 4.2), angle: 0), .dark, z: 0.3, group: 3),
+                    Part(.capsule(a: V2(13, 11), b: V2(17, 17), ra: 1.1, rb: 1.1), .gold, z: 0.4, group: 4, innerOutline: false),
+                    Part(.capsule(a: V2(19, 6), b: V2(22, 10), ra: 0.9, rb: 0.9), .gold, z: 0.4, group: 5, innerOutline: false)]
+        case .timelessAmber:
+            return [Part(.polygon([V2(16, 3), V2(26, 9), V2(26, 21), V2(16, 28), V2(6, 21), V2(6, 9)]), .gold, z: 0, group: 0),
+                    Part(.ellipse(c: V2(16, 15), r: V2(3, 4.5), angle: 0.5), .wood, z: 0.1, group: 1, fixedTone: .shade),
+                    Part(.capsule(a: V2(10, 20), b: V2(12, 10), ra: 1.1, rb: 0.8), .white, z: 0.2, group: 2, innerOutline: false, fixedTone: .light)]
         default:
             return []
         }
@@ -688,6 +709,7 @@ enum ItemArt {
         switch item {
         case .snack: return [Decal(sprite: PixelSprite(stamp: ["e.e", "...", ".e."]), at: V2(16, 15), upscale: false)]
         case .luckyClover: return [Decal(sprite: PixelSprite(stamp: ["Y"]), at: V2(16, 18), upscale: false)]
+        case .shinyEgg: return [Decal(sprite: PixelSprite(stamp: [".W.", "WWW", ".W."]), at: V2(24, 24), upscale: false)]
         default: return []
         }
     }

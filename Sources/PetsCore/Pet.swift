@@ -58,6 +58,7 @@ enum CareReason: String, Codable {
 
 struct Pet: Codable, Identifiable {
     static let maxNeed: Double = 100
+    static let layTime: Double = 3 * 3600
 
     var id: UUID
     var name: String
@@ -74,10 +75,14 @@ struct Pet: Codable, Identifiable {
     var energy: Double = 100
     var health: Double = 100
     var wins = 0
+    /// Experience from fights won. See `level`.
+    var xp: Double = 0
     var weapon: Item?
+    /// Hits left before the weapon breaks.
+    var weaponDurability = 0
     var relic: Item?
     var buffs: [Buff] = []
-    /// Time spent with hunger, happiness and energy all above 70. Lays an egg at 6 h.
+    /// Time spent with hunger, happiness and energy all above 70. Lays an egg at `layTime`.
     var contentTime: Double = 0
 
     /// Grid pixels from the left edge.
@@ -179,7 +184,7 @@ struct Pet: Codable, Identifiable {
     mutating func updateNeeds(dt: Double, clock: Double, night: Bool, calm: Bool,
                               petsWithin60: Int, petsWithin30: Int) -> DeathCause? {
         let hours = dt / 3600
-        age += dt
+        if relic != .timelessAmber { age += dt }
         for b in buffs.indices { buffs[b].remaining -= dt }
         buffs.removeAll { $0.remaining <= 0 }
         let sleepGain = 20 * hours * (relic == .moonPillow ? 1.5 : 1)
@@ -232,7 +237,7 @@ struct Pet: Codable, Identifiable {
 
         // Egg laying builds up while everything is above 70.
         if stage != .baby && hunger > 70 && happiness > 70 && energy > 70 {
-            contentTime = min(6 * 3600, contentTime + dt)
+            contentTime = min(Pet.layTime, contentTime + dt)
         }
 
         // Health

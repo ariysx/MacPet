@@ -223,6 +223,7 @@ final class PetsView: MTKView {
         var ui = PetsRenderer.UIUniforms()
         if isMain && app.playMode {
             let playUI = app.playUI
+            playUI.feeding = feedKeyDown
             playUI.resize(gridWidth: Int(grid.x), gridHeight: Int(grid.y))
             if let colours = playUI.render(world: app.world, hits: lastFrame.hits, atlas: renderer.atlas,
                                            regions: app.regions, time: app.renderTime, groundY: groundY) {

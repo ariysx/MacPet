@@ -11,6 +11,11 @@ enum WorldEvent: Equatable {
     case revived(name: String)
     case dailyChestArrived
     case lootCollected([Item], fromChest: Bool)
+    case levelUp(name: String, level: Int)
+    /// New Petdex entries, as display names, from a hatch.
+    case discovered(name: String, entries: [String])
+    case dexReward(found: Int)
+    case weaponBroke(name: String, item: Item)
 }
 
 /// All pet state and rules. No AppKit or Metal. Positions are in grid pixels; only x
@@ -42,6 +47,14 @@ struct World: Codable {
     /// Loot bags and the daily chest lying on the ground.
     var loot: [Loot] = []
     var lastDailyChestDay = ""
+    /// Calendar days in a row a daily chest has turned up.
+    var dailyStreak = 0
+    /// Petdex keys such as "shape.fox", in the order they were found.
+    var dex: [String] = []
+    /// Milestone chests already given.
+    var dexRewards = 0
+    /// Weapons in the bag that have been used: hits left on each worn copy.
+    var wornWeapons: [Item: [Int]] = [:]
 
     // MARK: Not saved
 
@@ -56,14 +69,17 @@ struct World: Codable {
     var events: [WorldEvent] = []
     /// Blows landed since the app last looked, for hit effects. The app drains this.
     var hits: [CombatHit] = []
-    var monsterSpawnChance = 0.12
+    /// Chance of a monster at each check (every `monsterCheckInterval` of daytime).
+    var monsterSpawnChance = 0.2
+    static let monsterCheckInterval: Double = 600
+    var critChance = Combat.critChance
     /// Local hour of day, 0..<24. Injected so tests can pick day or night.
     var localHour: () -> Double = World.systemLocalHour
     var now: () -> Date = { Date() }
 
     enum CodingKeys: String, CodingKey {
         case clock, pets, eggs, graves, graveyard, hatchedCount, random, monsterSpawnTimer, rainTimer
-        case inventory, loot, lastDailyChestDay
+        case inventory, loot, lastDailyChestDay, dailyStreak, dex, dexRewards, wornWeapons
     }
 
     init(seed: UInt64) {
@@ -165,6 +181,7 @@ struct World: Codable {
         pets.append(pet)
         hatchedCount += 1
         events.append(.hatched(name: name, mutations: egg.genes.mutations))
+        discover(pet.looks, name: name)
     }
 
     private mutating func updateGraves(dt: Double) {
@@ -201,7 +218,8 @@ struct World: Codable {
         }
         let pet = pets.remove(at: i)
         // Equipment goes back in the bag for the rest of the family.
-        addToInventory([pet.weapon, pet.relic].compactMap { $0 })
+        if let weapon = pet.weapon { stowWorn(weapon, durability: pet.weaponDurability) }
+        if let relic = pet.relic { addToInventory([relic]) }
         for p in pellets.indices where pellets[p].claimedBy == pet.id { pellets[p].claimedBy = nil }
         graves.append(Grave(id: UUID(), x: pet.x, name: pet.name, remaining: World.graveDuration))
         graveyard.insert(GraveyardEntry(name: pet.name, generation: pet.generation, traits: pet.traits,
@@ -229,7 +247,7 @@ struct World: Codable {
             }
 
             // Old age: each hour as an elder, a 2% chance of dying peacefully.
-            if pets[i].stage == .elder {
+            if pets[i].stage == .elder && pets[i].relic != .timelessAmber {
                 pets[i].elderRollTimer += dt
                 if pets[i].elderRollTimer >= 3600 {
                     pets[i].elderRollTimer -= 3600
@@ -240,7 +258,7 @@ struct World: Codable {
             }
 
             // Laying
-            if pets[i].contentTime >= 6 * 3600 && freeSlots > 0 {
+            if pets[i].contentTime >= Pet.layTime && freeSlots > 0 {
                 let genes = Genetics.inherit(from: pets[i], generation: pets[i].generation + 1, &random)
                 let side: Double = random.coin() ? 12 : -12
                 if addEgg(at: pets[i].x + side, genes: genes) {
@@ -590,6 +608,8 @@ struct World: Codable {
             pets[i].thrownBonus = false
             pets[i].hurtFlash = 0
             pets[i].isWalking = false
+            // Saves from before durability: weapons start fresh.
+            if let weapon = pets[i].weapon, pets[i].weaponDurability <= 0 { pets[i].weaponDurability = weapon.maxDurability }
         }
     }
 }

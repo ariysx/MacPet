@@ -34,6 +34,7 @@ final class NeedsTests: XCTestCase {
         var traits = Traits.plain
         traits.affection = .cuddly
         let id = addPet(&world, traits: traits)
+        world.update(id) { $0.contentTime = -.infinity } // never lays, so it stays alone
         world.advance(by: 6 * hour)
         let before = world[pet: id]!.happiness
         XCTAssertEqual(before, 100 - 6 * 4 * 1.2, accuracy: 0.01)

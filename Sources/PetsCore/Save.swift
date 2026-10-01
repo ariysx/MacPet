@@ -39,6 +39,7 @@ enum SaveStore {
             }
             var world = file.world
             world.resetTransientState()
+            world.syncDex()
             return (world, .loaded)
         } catch {
             let moved = corruptURL(for: url, date: date)
@@ -71,7 +72,7 @@ enum SaveStore {
 
         // Missing lists start empty rather than copying the template's contents.
         var topDefaults = tw
-        for key in ["pets", "eggs", "graves", "loot", "graveyard"] { topDefaults[key] = [Any]() }
+        for key in ["pets", "eggs", "graves", "loot", "graveyard", "dex"] { topDefaults[key] = [Any]() }
         world = fill(world, from: topDefaults)
         for key in ["pets", "eggs", "graves", "loot"] {
             if let list = world[key] as? [[String: Any]] { world[key] = list.map { fill($0, from: first(key)) } }
