@@ -72,6 +72,18 @@ Repainted after the reference backgrounds: hue-shifted ramps (cool shadows, warm
 
 ---
 
+### Gameplay loop, third pass
+
+- **More eggs:** laying needs 3 h of contentment (was 6 h). Mystery and Shiny Eggs drop from monsters and chests and are placed from the bag. Petdex milestones (every 8 entries) drop a chest with a Mystery Egg.
+- **Faster fights:** a spawn check every 10 minutes of daytime at 20% (was hourly at 12%), plus the War Horn to call one. Crits (12%, 1.8x) and per-pet experience and levels (+0.4 attack per level, to 20).
+- **Weapons wear out** (durability per hit); relics never do. Timeless Amber (legendary relic, only from rare drops) freezes age.
+- **Daily streak** grows the daily chest.
+- **Impact frames:** hit-stop (45 ms, 90 ms on crits and heavy blows, 220 ms on the finishing blow), a white silhouette for the first frames of a hit, screen shake, and 6-frame bursts (flash with speed lines, starburst, ring and sparks).
+- **Weather:** drizzle, rain or thunderstorm, chosen when rain starts, or held from the Weather menu. Storms grey the sky and throw lightning every 6 to 20 s. Rain is lighter than before and splashes on the meadow.
+- **UI:** pictograms instead of words for controls, a pointer badge for what a click does, a Petdex panel, animated status icons.
+- **Play mode** hides other apps and restores exactly the ones it hid.
+- **50 species**, the rarer the more mythical.
+
 ## Original spec
 
 ### 1. Goals and constraints
