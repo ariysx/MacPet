@@ -43,7 +43,7 @@ Pets are drawn procedurally at 64 x 64: each species is a rig of shaded parts (b
 
 Every pet hatches with a genome:
 
-- **Body:** blob, bird, cat, bunny, frog, bear, ghost, fox, dragon
+- **Body (20):** blob, bird, cat, mouse, pig, duck (common); bunny, frog, bear, deer, hedgehog, penguin, turtle (uncommon); ghost, fox, owl, raccoon, axolotl (rare); dragon (epic); unicorn (legendary)
 - **Colours:** 22 colourways, from common oranges and blues to gold and prism
 - **Pattern:** plain, spots, stripes, patch, socks, tips, two-tone, checker, speckle, heart, stars, rainbow
 - **Accessory:** none, leaf, bow, antenna, horns, crest, flower, sprout, top hat, cap, mushroom, unicorn horn, crown, halo, flame

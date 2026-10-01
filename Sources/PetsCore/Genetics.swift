@@ -47,14 +47,19 @@ extension RarityRanked {
 }
 
 enum BodyShape: String, Codable, CaseIterable, RarityRanked {
-    case blob, bird, cat, bunny, frog, bear, ghost, fox, dragon
+    case blob, bird, cat, mouse, pig, duck
+    case bunny, frog, bear, deer, hedgehog, penguin, turtle
+    case ghost, fox, owl, raccoon, axolotl
+    case dragon
+    case unicorn
 
     var rarity: Rarity {
         switch self {
-        case .blob, .bird, .cat: return .common
-        case .bunny, .frog, .bear: return .uncommon
-        case .ghost, .fox: return .rare
+        case .blob, .bird, .cat, .mouse, .pig, .duck: return .common
+        case .bunny, .frog, .bear, .deer, .hedgehog, .penguin, .turtle: return .uncommon
+        case .ghost, .fox, .owl, .raccoon, .axolotl: return .rare
         case .dragon: return .epic
+        case .unicorn: return .legendary
         }
     }
 }

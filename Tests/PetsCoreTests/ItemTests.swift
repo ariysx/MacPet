@@ -3,7 +3,8 @@ import XCTest
 
 final class RarityTests: XCTestCase {
     func testEveryTierExistsForEachGene() {
-        XCTAssertEqual(Set(BodyShape.allCases.map(\.rarity)), [.common, .uncommon, .rare, .epic])
+        XCTAssertEqual(Set(BodyShape.allCases.map(\.rarity)), Set(Rarity.allCases))
+        XCTAssertEqual(BodyShape.allCases.count, 20)
         XCTAssertEqual(Set(Pattern.allCases.map(\.rarity)), Set(Rarity.allCases))
         XCTAssertEqual(Set(Accessory.allCases.map(\.rarity)), Set(Rarity.allCases))
         XCTAssertEqual(Set(EyeStyle.allCases.map(\.rarity)), Set(Rarity.allCases))

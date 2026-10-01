@@ -182,6 +182,7 @@ enum SpeciesRig {
         case .ghost: return ghost(pose)
         case .fox: return fox(pose)
         case .dragon: return dragon(pose)
+        default: return buildMore(shape, pose: pose) ?? cat(pose)
         }
     }
 
@@ -865,9 +866,9 @@ enum PetComposer {
 
 /// How a species looks head-on. One generic rig draws every species from the front and back.
 struct FrontProfile {
-    enum Ears { case none, pointy(Double), round, long, darkTipped }
-    enum Snout { case none, muzzle(Double), beak, fox, bigSnout }
-    enum Tail { case none, thin, bushy, cotton, spade, feathers }
+    enum Ears { case none, pointy(Double), round, long, darkTipped, bigRound, floppy, side, tufts }
+    enum Snout { case none, muzzle(Double), beak, fox, bigSnout, pig, bill, nose(Ramp) }
+    enum Tail { case none, thin, bushy, cotton, spade, feathers, curl, ringed }
     enum Body { case quadruped, biped, blob, ghost, frog }
 
     var body = Body.quadruped
@@ -885,8 +886,18 @@ struct FrontProfile {
     var socks = false
     var horns = false
     var chest: Ramp?
+    var horn = false
+    var mane = false
+    var neck = false
+    var spikes = false
+    var mask = false
+    var shell = false
+    var gills = false
+    var faceDisc = false
+    var flippers = false
 
     static func of(_ shape: BodyShape) -> FrontProfile {
+        if let p = more(shape) { return p }
         var p = FrontProfile()
         switch shape {
         case .blob:
@@ -912,6 +923,8 @@ struct FrontProfile {
         case .dragon:
             p.bodyR = V2(6.4, 5.8); p.headR = 4.8; p.headY = 6.6; p.legLen = 3.8; p.legR = (2.1, 1.8); p.legGap = 3
             p.ears = .none; p.snout = .muzzle(1.2); p.tail = .spade; p.batWings = true; p.horns = true
+        default:
+            break
         }
         return p
     }
@@ -999,6 +1012,12 @@ extension SpeciesRig {
                                                  rb: p.legR.1), .body, z: back ? 2 : -1, group: s < 0 ? 5 : 8, patterned: true,
                                         toneBias: back ? 0 : 1, role: .limb))
                 }
+                if p.flippers {
+                    let flap = pose.wing
+                    b.parts.append(Part(.ellipse(c: c + V2(s * (bodyR.x - 0.2), -0.5 + flap), r: V2(1.6, 4.6),
+                                                 angle: s * (0.25 + flap * 0.5)), .body, z: back ? 0.5 : 0.4,
+                                        group: s < 0 ? 9 : 10, role: .extremity))
+                }
                 if p.wings {
                     let flap = pose.wing
                     b.parts.append(Part(.ellipse(c: c + V2(s * (bodyR.x - 0.5), 0.5 + flap), r: V2(2.6, 4.4),
@@ -1040,6 +1059,26 @@ extension SpeciesRig {
                         b.parts.append(Part(headPolygon(b, [V2(s * 0.38, 0.86), V2(s * 0.75, 0.62), V2(s * 0.66, 1.2)]), .pink,
                                             z: earZ + 0.01, group: 6, innerOutline: false))
                     }
+                case .bigRound:
+                    let ec = b.onHead(V2(s * 0.78, 0.82))
+                    b.parts.append(Part(.ellipse(c: ec, r: V2(3, 3), angle: 0), .body, z: earZ, group: 6, patterned: true,
+                                        role: .extremity))
+                    if !back {
+                        b.parts.append(Part(.ellipse(c: ec, r: V2(1.9, 1.9), angle: 0), .pink, z: earZ + 0.01, group: 6,
+                                            innerOutline: false))
+                    }
+                case .floppy:
+                    let base = V2(s * 0.5, 0.7)
+                    b.parts.append(Part(headPolygon(b, [base, base + V2(s * 0.55, 0.2), base + V2(s * 0.6, -0.5)]), .body,
+                                        z: back ? 0.5 : faceZ + 0.15, group: 6, patterned: true, role: .extremity))
+                case .side:
+                    let ec = b.onHead(V2(s * 1.05, 0.55))
+                    b.parts.append(Part(.ellipse(c: ec, r: V2(2.4, 1.1), angle: s * 0.35), .body, z: earZ, group: 6,
+                                        patterned: true, role: .extremity))
+                case .tufts:
+                    let base = V2(s * 0.45, 0.75)
+                    b.parts.append(Part(headPolygon(b, [base, base + V2(s * 0.45, 0), base + V2(s * 0.5, 0.8)]), .body, z: earZ,
+                                        group: 6, role: .extremity))
                 case .round:
                     let ec = b.onHead(V2(s * 0.72, 0.78))
                     b.parts.append(Part(.ellipse(c: ec, r: V2(2.1, 2.1), angle: 0), .body, z: earZ, group: 6, patterned: true,
@@ -1079,6 +1118,16 @@ extension SpeciesRig {
                 case .fox:
                     b.parts.append(Part(headPolygon(b, [V2(-0.55, -0.15), V2(0.55, -0.15), V2(0, -0.95)]), .white,
                                         z: faceZ + 0.1, group: 1))
+                case .pig:
+                    b.parts.append(Part(.ellipse(c: b.onHead(V2(0, -0.35)), r: V2(2.4, 1.8), angle: 0), .pink,
+                                        z: faceZ + 0.2, group: 2))
+                case .bill:
+                    let open = pose.mouth == .open ? 0.2 : 0
+                    b.parts.append(Part(headPolygon(b, [V2(-0.55, -0.15), V2(0.55, -0.15), V2(0.5, -0.6 - open), V2(-0.5, -0.6 - open)]),
+                                        .gold, z: faceZ + 0.2, group: 2))
+                case .nose(let ramp):
+                    b.parts.append(Part(.ellipse(c: b.onHead(V2(0, -0.35)), r: V2(0.9, 0.75), angle: 0), ramp,
+                                        z: faceZ + 0.2, group: 2))
                 case .beak:
                     let open = pose.mouth == .open ? 0.25 : 0
                     b.parts.append(Part(headPolygon(b, [V2(-0.35, -0.2), V2(0.35, -0.2), V2(0, -0.75 - open)]), .gold,
@@ -1106,11 +1155,77 @@ extension SpeciesRig {
             case .spade:
                 b.parts += tail(from: tailBase, angle: back ? -1.3 : -0.4, curl: 0.5 + wag, segments: 2, length: 3.6,
                                 radius: (1.8, 1), ramp: .body, z: tailZ)
+            case .curl:
+                if back {
+                    b.parts.append(Part(.ring(c: c + V2(0, -bodyR.y * 0.1), r: V2(1.6, 1.6), width: 1), .pink, z: tailZ, group: 5))
+                }
+            case .ringed:
+                var tp = tailBase
+                var a = (back ? -1.2 : 0.9) + wag
+                for k in 0..<4 {
+                    let next = tp + rotate(V2(2.4, 0), by: a)
+                    b.parts.append(Part(.capsule(a: tp, b: next, ra: 2, rb: 1.9), k % 2 == 0 ? .body : .dark, z: tailZ + Double(k) * 0.01,
+                                        group: 5))
+                    tp = next
+                    a += back ? -0.3 : 0.3
+                }
             case .feathers:
                 let fan = back ? 0.0 : 3.0
                 b.parts.append(Part(.polygon([c + V2(-3 + fan, 2), c + V2(-5 + fan, 9), c + V2(0 + fan, 10), c + V2(5 + fan, 9),
                                               c + V2(3 + fan, 2)]), .body, z: back ? 1.5 : -1, group: 5, patterned: true,
                                     role: .extremity))
+            }
+            // Species features.
+            if p.neck {
+                b.parts.append(Part(.capsule(a: c + V2(0, bodyR.y * 0.4), b: headC + V2(0, -2), ra: 2.4, rb: 2), .body,
+                                    z: back ? -0.6 : 0.6, group: 1, patterned: true))
+            }
+            if p.horn {
+                let base = b.onHead(V2(0, 0.85))
+                b.parts.append(Part(.polygon([base + V2(-1.1, 0), base + V2(1.1, 0), base + V2(0, 7.5)]), .gold, z: faceZ + 0.4, group: 21))
+                b.parts.append(Part(.capsule(a: base + V2(-0.8, 2), b: base + V2(0.8, 2.6), ra: 0.35, rb: 0.35), .white, z: faceZ + 0.41,
+                                    group: 21, innerOutline: false))
+            }
+            if p.mane {
+                let top = b.onHead(V2(0, 1))
+                b.parts.append(Part(.polygon([top + V2(-2.5, -0.5), top + V2(2.5, -0.5), top + V2(1.5, 1.8), top + V2(-1.5, 2)]),
+                                    .secondary, z: faceZ + 0.3, group: 22))
+                if back {
+                    b.parts.append(Part(.polygon([top + V2(-2, 0), top + V2(2, 0), c + V2(1.5, bodyR.y * 0.6), c + V2(-1.5, bodyR.y * 0.6)]),
+                                        .secondary, z: faceZ + 0.3, group: 22))
+                }
+            }
+            if p.spikes {
+                for k in 0..<13 {
+                    let a = Double(k) / 12 * .pi
+                    let root = c + V2(cos(a) * bodyR.x * 0.9, sin(a) * bodyR.y * 0.8 + 1)
+                    let out = V2(cos(a), sin(a) + 0.3)
+                    let side = V2(-out.y, out.x)
+                    b.parts.append(Part(.polygon([root + side * 1.5, root - side * 1.5, root + out * 4.5]), .secondary,
+                                        z: back ? 2 + Double(k) * 0.001 : -0.5, group: 23, toneBias: k % 2))
+                }
+            }
+            if p.mask && !back {
+                b.parts.append(Part(headPolygon(b, [V2(-0.95, 0.35), V2(0.95, 0.35), V2(0.9, -0.05), V2(0, -0.2), V2(-0.9, -0.05)]),
+                                    .dark, z: faceZ + 0.05, group: 1))
+            }
+            if p.shell {
+                b.parts.append(Part(.ellipse(c: c + V2(0, bodyR.y * 0.4), r: V2(bodyR.x * 1.3, bodyR.y * 1.25), angle: angle),
+                                    .secondary, z: back ? 2.5 : -0.3, group: 24))
+            }
+            if p.gills {
+                for side in [-1.0, 1.0] {
+                    for (k, a) in [0.6, 1.0, 1.4].enumerated() {
+                        let root = b.onHead(V2(side * 0.8, 0.1))
+                        let dir = V2(side * cos(a - 0.4), sin(a - 0.4) + 0.2)
+                        b.parts.append(Part(.capsule(a: root, b: root + dir * 5, ra: 1.1, rb: 0.6), .secondary,
+                                            z: faceZ - 0.2 - Double(k) * 0.01, group: 25, role: .extremity))
+                    }
+                }
+            }
+            if p.faceDisc && !back {
+                b.parts.append(Part(.ellipse(c: b.onHead(V2(0, -0.05)), r: V2(p.headR * 0.8, p.headR * 0.72), angle: 0), .secondary,
+                                    z: faceZ + 0.02, group: 1))
             }
             b.eyeX = (0.42, 0)
             b.eyeY = 0.12

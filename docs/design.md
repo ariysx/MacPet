@@ -10,7 +10,7 @@ Status: built. The original spec (approved 2026-09-30) is below, with the change
 
 - Each pet carries a genome (`Genes`): body shape, colourway, pattern, accessory, eye style and the five trait pairs, plus generation, parent name and the list of mutations.
 - Every gene variant has a rarity tier: Common, Uncommon, Rare, Epic, Legendary, weighted 100 / 35 / 12 / 4 / 1. A pet's rarity is its rarest feature.
-  - Body shapes (9): blob, bird, cat (C); bunny, frog, bear (U); ghost, fox (R); dragon (E).
+  - Body shapes (20): blob, bird, cat, mouse, pig, duck (C); bunny, frog, bear, deer, hedgehog, penguin, turtle (U); ghost, fox, owl, raccoon, axolotl (R); dragon (E); unicorn (L).
   - Colourways (22): 12 common pairs from the original palette, plus coral, mint, peach (U); midnight, plum, sunset (R); obsidian, frost (E); gold, prism (L).
   - Patterns (12): plain, spots, stripes, patch (C); socks, tips, two-tone (U); checker, speckle (R); heart, stars (E); rainbow (L).
   - Accessories (15): none, leaf, bow (C); antenna, horns, crest, flower, sprout (U); top hat, cap, mushroom (R); unicorn horn, crown (E); halo, flame (L).
