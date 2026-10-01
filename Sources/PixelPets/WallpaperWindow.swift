@@ -1,8 +1,8 @@
 import AppKit
 
 /// A borderless window that sits at desktop level on one display, under the icons and every
-/// normal window. In play mode the main display's window rises just above the desktop icons
-/// (still below normal windows) and takes clicks and keys.
+/// normal window. In play mode the main display's window rises above the desktop icons and
+/// widgets (still below normal windows) and takes clicks and keys.
 @MainActor
 final class WallpaperWindow: NSWindow {
     private(set) var petsView: PetsView!
@@ -32,7 +32,9 @@ final class WallpaperWindow: NSWindow {
     func setPlayMode(_ on: Bool) {
         playMode = on
         if on {
-            level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+            // Just below normal windows: above the desktop icons and widgets (macOS 14+ puts
+            // widgets above the icon level), but under every app window.
+            level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.normalWindow)) - 1)
             ignoresMouseEvents = false
             makeKeyAndOrderFront(nil)
             makeFirstResponder(petsView)

@@ -189,6 +189,10 @@ enum PropArt {
 
     /// Weapons are drawn with their grip at the centre of the canvas, pointing up and forward.
     static func weapon(_ item: Item) -> PixelSprite {
+        Rig.render(weaponParts(item), size: 64, scale: 2)
+    }
+
+    static func weaponParts(_ item: Item) -> [Part] {
         let grip = V2(16, 6)
         let dir = rotate(V2(0, 1), by: -0.55)
         func along(_ d: Double, _ side: Double = 0) -> V2 { grip + dir * d + V2(dir.y, -dir.x) * side }
@@ -230,7 +234,7 @@ enum PropArt {
                               .white, z: 0))
             parts.append(Part(.capsule(a: along(-3), b: along(2), ra: 1.1, rb: 1.1), .red, z: 0.5, group: 2))
         }
-        return Rig.render(parts, size: 64, scale: 2)
+        return parts
     }
 
     static let smokeFrames = 6
@@ -319,6 +323,123 @@ enum PropArt {
             ".....",
             "..rR.",
             "..qq."])
+        }
+    }
+}
+
+// MARK: - Item icons for the bag
+
+enum ItemArt {
+    /// A 16 x 16 icon, designed on the same 32-unit canvas and rendered at half scale.
+    static func icon(_ item: Item) -> PixelSprite {
+        Rig.render(parts(item), decals: decals(item), size: 16, scale: 0.5)
+    }
+
+    private static func bottle(_ liquid: Ramp, shape: Int) -> [Part] {
+        switch shape {
+        case 0: // round flask
+            return [Part(.ellipse(c: V2(16, 11), r: V2(9, 9), angle: 0), .white, z: 0, group: 0),
+                    Part(.ellipse(c: V2(16, 9.5), r: V2(7.6, 6.5), angle: 0), liquid, z: 0.1, group: 0),
+                    Part(.capsule(a: V2(16, 18), b: V2(16, 25), ra: 3, rb: 3), .white, z: -0.1, group: 1),
+                    Part(.ellipse(c: V2(16, 26.5), r: V2(3.6, 2.2), angle: 0), .wood, z: 0.2, group: 2),
+                    Part(.ellipse(c: V2(12, 14), r: V2(1.6, 2.4), angle: 0.4), .white, z: 0.3, group: 0, innerOutline: false, fixedTone: .light)]
+        case 1: // tall vial
+            return [Part(.capsule(a: V2(16, 5), b: V2(16, 22), ra: 5.5, rb: 5.5), .white, z: 0, group: 0),
+                    Part(.capsule(a: V2(16, 5), b: V2(16, 15), ra: 4.4, rb: 4.4), liquid, z: 0.1, group: 0),
+                    Part(.polygon([V2(10, 23), V2(22, 23), V2(22, 28), V2(10, 28)]), .wood, z: 0.2, group: 2),
+                    Part(.capsule(a: V2(13, 9), b: V2(13, 18), ra: 1, rb: 1), .white, z: 0.3, group: 0, innerOutline: false, fixedTone: .light)]
+        default: // wide jar
+            return [Part(.polygon([V2(7, 3), V2(25, 3), V2(26, 19), V2(6, 19)]), .white, z: 0, group: 0),
+                    Part(.polygon([V2(8, 4), V2(24, 4), V2(24.5, 14), V2(7.5, 14)]), liquid, z: 0.1, group: 0),
+                    Part(.polygon([V2(8, 19), V2(24, 19), V2(24, 25), V2(8, 25)]), .gold, z: 0.2, group: 2),
+                    Part(.capsule(a: V2(10, 7), b: V2(10, 16), ra: 1, rb: 1), .white, z: 0.3, group: 0, innerOutline: false, fixedTone: .light)]
+        }
+    }
+
+    private static func feather(_ ramp: Ramp, tip: Ramp) -> [Part] {
+        [Part(.polygon([V2(8, 6), V2(12, 9), V2(22, 26), V2(19, 27), V2(11, 18)]), ramp, z: 0, group: 0),
+         Part(.polygon([V2(12, 9), V2(17, 10), V2(24, 22), V2(22, 26)]), ramp, z: 0.1, group: 1, toneBias: 1),
+         Part(.polygon([V2(18, 21), V2(24, 22), V2(22, 26), V2(19, 27)]), tip, z: 0.2, group: 2),
+         Part(.capsule(a: V2(5, 3), b: V2(21, 26), ra: 0.7, rb: 0.5), .wood, z: 0.3, group: 3, innerOutline: false)]
+    }
+
+    private static func parts(_ item: Item) -> [Part] {
+        if item.category == .weapon {
+            return PropArt.weaponParts(item).map { part in
+                var p = part
+                p.shape = part.shape.transformed({ $0 + V2(-4, 3) }, scale: 1)
+                return p
+            }
+        }
+        switch item {
+        case .snack:
+            return [Part(.ellipse(c: V2(16, 15), r: V2(11, 10), angle: 0), .wood, z: 0)]
+        case .tonic: return bottle(.red, shape: 0)
+        case .joyJuice: return bottle(.pink, shape: 0)
+        case .antidote: return bottle(.green, shape: 0)
+        case .elixir: return bottle(.purple, shape: 0)
+        case .strengthPotion: return bottle(.red, shape: 1)
+        case .couragePotion: return bottle(.blue, shape: 1)
+        case .hatchElixir: return bottle(.gold, shape: 2)
+        case .mutagen: return bottle(.green, shape: 2) + [
+            Part(.ellipse(c: V2(13, 10), r: V2(2, 2), angle: 0), .purple, z: 0.3, group: 4, innerOutline: false),
+            Part(.ellipse(c: V2(19, 8), r: V2(1.5, 1.5), angle: 0), .purple, z: 0.3, group: 4, innerOutline: false)]
+        case .espresso:
+            return [Part(.polygon([V2(7, 4), V2(22, 4), V2(23, 20), V2(6, 20)]), .white, z: 0, group: 0),
+                    Part(.ring(c: V2(24, 12), r: V2(4, 4.5), width: 2.2), .white, z: -0.1, group: 1),
+                    Part(.ellipse(c: V2(14.5, 19.5), r: V2(7.5, 1.8), angle: 0), .wood, z: 0.1, group: 0, fixedTone: .shade),
+                    Part(.capsule(a: V2(11, 23), b: V2(13, 29), ra: 0.8, rb: 0.6), .white, z: 0.2, group: 2, innerOutline: false, fixedTone: .light),
+                    Part(.capsule(a: V2(17, 23), b: V2(16, 28), ra: 0.8, rb: 0.6), .white, z: 0.2, group: 3, innerOutline: false, fixedTone: .light)]
+        case .featherCharm: return feather(.white, tip: .blue)
+        case .phoenixFeather: return feather(.red, tip: .gold)
+        case .cozyScarf:
+            return [Part(.ring(c: V2(16, 19), r: V2(9, 6), width: 5), .red, z: 0, group: 0),
+                    Part(.capsule(a: V2(19, 15), b: V2(21, 3), ra: 2.6, rb: 2.4), .red, z: 0.5, group: 1),
+                    Part(.capsule(a: V2(22, 15), b: V2(26, 5), ra: 2.4, rb: 2.2), .red, z: 0.4, group: 2, toneBias: 1),
+                    Part(.capsule(a: V2(18.5, 7), b: V2(23.5, 7.5), ra: 0.8, rb: 0.8), .white, z: 0.6, group: 1, innerOutline: false)]
+        case .snackPouch:
+            return [Part(.ellipse(c: V2(16, 11), r: V2(10, 8.5), angle: 0), .wood, z: 0, group: 0),
+                    Part(.polygon([V2(12, 17), V2(20, 17), V2(23, 25), V2(9, 25)]), .wood, z: -0.1, group: 1),
+                    Part(.capsule(a: V2(11, 18.5), b: V2(21, 18.5), ra: 1.4, rb: 1.4), .red, z: 0.2, group: 2)]
+        case .moonPillow:
+            return [Part(.ellipse(c: V2(16, 14), r: V2(13, 8), angle: 0), .blue, z: 0, group: 0),
+                    Part(.ellipse(c: V2(16, 15), r: V2(5, 5), angle: 0), .gold, z: 0.1, group: 1),
+                    Part(.ellipse(c: V2(18.5, 16.5), r: V2(4.2, 4.2), angle: 0), .blue, z: 0.2, group: 0)]
+        case .guardianShell:
+            return [Part(.ellipse(c: V2(16, 13), r: V2(12, 10), angle: 0), .green, z: 0, group: 0),
+                    Part(.polygon([V2(12, 9), V2(20, 9), V2(22, 15), V2(16, 20), V2(10, 15)]), .green, z: 0.1, group: 1, toneBias: -1),
+                    Part(.ellipse(c: V2(16, 4.5), r: V2(12, 2.5), angle: 0), .gold, z: -0.1, group: 2)]
+        case .heartLocket:
+            return [Part(.ring(c: V2(16, 20), r: V2(8, 8), width: 1.2), .gold, z: -0.1, group: 0),
+                    Part(.polygon([V2(16, 3), V2(26, 13), V2(24, 17), V2(20, 18), V2(16, 15), V2(12, 18), V2(8, 17), V2(6, 13)]),
+                         .red, z: 0.1, group: 1)]
+        case .luckyClover:
+            return [Part(.capsule(a: V2(16, 15), b: V2(20, 3), ra: 1, rb: 0.8), .green, z: -0.1, group: 0, toneBias: 1),
+                    Part(.ellipse(c: V2(11, 18), r: V2(5, 5), angle: 0), .green, z: 0, group: 1),
+                    Part(.ellipse(c: V2(21, 18), r: V2(5, 5), angle: 0), .green, z: 0, group: 2),
+                    Part(.ellipse(c: V2(16, 23), r: V2(5, 5), angle: 0), .green, z: 0.1, group: 3),
+                    Part(.ellipse(c: V2(16, 13), r: V2(5, 5), angle: 0), .green, z: 0.2, group: 4)]
+        default:
+            return []
+        }
+    }
+
+    private static func decals(_ item: Item) -> [Decal] {
+        switch item {
+        case .snack: return [Decal(sprite: PixelSprite(stamp: ["e.e", "...", ".e."]), at: V2(16, 15), upscale: false)]
+        case .luckyClover: return [Decal(sprite: PixelSprite(stamp: ["Y"]), at: V2(16, 18), upscale: false)]
+        default: return []
+        }
+    }
+
+    /// Rarity tint for frames and names.
+    static func ramp(for rarity: Rarity) -> Ramp {
+        switch rarity {
+        case .common: return .stone
+        case .uncommon: return .green
+        case .rare: return .blue
+        case .epic: return .purple
+        case .legendary: return .gold
         }
     }
 }

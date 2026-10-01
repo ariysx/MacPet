@@ -204,6 +204,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
     float3 bottom = mix(kSkyBottom[d.a], kSkyBottom[d.b], d.t);
     float v = clamp((g.y - groundTop) / skyH, 0.0, 1.0);
     float3 col;
+    bool clouded = false; // anything solid in front of the sky: no stars there
 
     if ((u.background.x & kBackgroundImage) != 0u && u.background.y > 0u) {
         // A picture chosen by the user, cropped to fill, lit for the time of day.
@@ -234,6 +235,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float scale = 0.7 + hash11(fi * 2.3) * 0.6;
             float3 c;
             if (cloud(g, float2(floor(x), floor(y)), scale, fi, top, c)) {
+                clouded = true;
                 col = mix(c, c * tint, 0.8);
                 if (night > 0.5) col = mix(col, top * 1.4, 0.6);
             }
@@ -251,6 +253,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             if (g.y > snowLine) rock = lit ? float3(0.95, 0.96, 0.99) : float3(0.75, 0.81, 0.92);
             if (abs(slope) < 0.6 && checker(pixel)) rock = mix(rock, float3(0.55, 0.60, 0.76), 0.5);
             col = mix(rock, bottom, 0.35) * tint;
+            clouded = true;
         }
 
         // Far hill with a pine treeline.
@@ -262,8 +265,9 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         float3 farGreen = mix(float3(0.44, 0.66, 0.50), bottom, 0.25);
         if (g.y < treeBase + treeH && g.y >= treeBase - 2.0 && abs(g.x - treeX) < (treeBase + treeH - g.y) * 0.32) {
             col = (g.x < treeX ? farGreen * 0.9 : farGreen * 0.72) * tint;
+            clouded = true;
         }
-        if (g.y < farH) col = farGreen * tint;
+        if (g.y < farH) { col = farGreen * tint; clouded = true; }
 
         // Near hill with round bushes.
         float nearH = groundTop + 8.0 + floor(6.0 * sin(g.x * 0.023 + 2.1) + 3.0 * sin(g.x * 0.061 + 5.0));
@@ -275,14 +279,16 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         float2 bd = (g - bush) / br;
         if (hash11(bushCell * 4.7) > 0.4 && dot(bd, bd) < 1.0) {
             col = (bd.x < -0.1 && bd.y > 0.1 ? nearGreen * 1.12 : bd.y < -0.3 ? nearGreen * 0.78 : nearGreen * 0.94) * tint;
+            clouded = true;
         }
-        if (g.y < nearH) col = nearGreen * tint;
+        if (g.y < nearH) { col = nearGreen * tint; clouded = true; }
 
         // A big shaded oak on the right.
         float2 treeAt = float2(floor(width * 0.82), groundTop - 7.0);
         float2 tp = g - treeAt;
         if (abs(tp.x + tp.y * 0.05) < 4.0 + max(0.0, 6.0 - tp.y) * 0.6 && tp.y >= 0.0 && tp.y < 46.0) {
             col = (tp.x < 0.0 ? float3(0.47, 0.33, 0.25) : float3(0.36, 0.25, 0.20)) * tint;
+            clouded = true;
         }
         float leaf = -2.0;
         for (int i = 0; i < 11; i++) {
@@ -299,6 +305,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             if (leaf > 0.38 && leaf <= 0.5 && checker(pixel)) c = mid;
             if (leaf > -0.18 && leaf <= -0.05 && checker(pixel)) c = dark;
             col = c * tint;
+            clouded = true;
         }
     }
 
@@ -306,7 +313,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
     if (night > 0.01 && v > 0.15) {
         float h = hash21(pixel);
         bool visible = (u.background.x & kBackgroundImage) == 0u || dot(col, float3(0.33)) < 0.25;
-        if (h > 0.986 && visible) {
+        if (h > 0.986 && visible && !clouded) {
             float twinkle = 0.55 + 0.45 * sin(u.time * (0.4 + hash21(pixel + 7.0)) + h * 60.0);
             col = mix(col, float3(1.0, 0.97, 0.86), night * twinkle);
         }
@@ -424,7 +431,7 @@ static uint readAtlas(texture2d<uint, access::read> atlas, uint tile, uint2 loca
     return atlas.read(origin + local).r;
 }
 
-static float3 drawItem(constant SceneItem& it, float2 g, float groundTop, constant SceneUniforms& u,
+static float3 drawItem(constant SceneItem& it, float2 g, float groundTop, float3 light, constant SceneUniforms& u,
                        texture2d<uint, access::read> atlas, float3 col) {
     float size = kTile * float(max(it.tileSpan, 1u));
     float2 origin = float2(floor(it.position.x - size * 0.5), floor(it.position.y));
@@ -445,7 +452,7 @@ static float3 drawItem(constant SceneItem& it, float2 g, float groundTop, consta
         if (ink != 0u) {
             float3 c = inkColour(ink, it.primary.rgb, it.secondary.rgb);
             if ((it.flags & kHurt) != 0u) c = mix(c, float3(1.0, 0.25, 0.25), 0.55);
-            col = c;
+            col = c * light;
         }
     }
 
@@ -518,13 +525,16 @@ fragment float4 petsFragment(VOut in [[stage_in]],
     float2 g = floor(frag / cell);
     float k = u.grid.x / 480.0;
     float groundTop = floor(u.grid.y * 0.22 / k) * k; // the walking line
+    // Sprites share the scene's light, a little brighter so pets stay readable at night.
+    DayBlend d = dayBlend(u.dayPhase);
+    float3 light = mix(float3(1.0), mix(kTint[d.a], kTint[d.b], d.t), 0.8) + float3(0.04, 0.04, 0.06);
 
     float3 col = landscape(g, u, image);
     if (u.playMode > 0.5) col *= 0.85;
 
     uint count = min(u.itemCount, kMaxItems);
     for (uint i = 0; i < count; i++) {
-        col = drawItem(items[i], g, groundTop, u, atlas, col);
+        col = drawItem(items[i], g, groundTop, light, u, atlas, col);
     }
     if ((u.background.x & kBackgroundImage) == 0u) col = foreground(g, u, col);
     return float4(saturate(col), 1.0);

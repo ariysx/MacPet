@@ -9,6 +9,10 @@ import QuartzCore
 import ServiceManagement
 import UserNotifications
 
+/// Time of Day override from the menu, in local hours; nil follows the clock. A global so the
+/// simulation's clock closure can read it.
+var timeOfDayOverride: Double?
+
 /// A menu item's action as a closure, so menu rows can carry their own pet or item.
 final class MenuAction: NSObject {
     let run: @MainActor () -> Void
@@ -32,7 +36,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         static let fps = "fps"
         static let notifications = "notifications"
         static let background = "background"
+        static let timeOfDay = "timeOfDay"
     }
+
+    private static let timesOfDay: [(String, Double?)] = [("Live", nil), ("Dawn", 6.5), ("Day", 12), ("Dusk", 19.3), ("Night", 23.5)]
 
     // MARK: State
 
@@ -83,6 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
         (world, loadOutcome) = SaveStore.load(from: saveURL, newSeed: UInt64.random(in: 1...UInt64.max))
+        timeOfDayOverride = Self.timesOfDay.first { $0.0 == defaults.string(forKey: Key.timeOfDay) }?.1
+        world.localHour = { timeOfDayOverride ?? World.systemLocalHour() }
         defaults.register(defaults: [Key.fps: 30, Key.notifications: true])
 
         guard let renderer = PetsRenderer() else {
@@ -162,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateDayPhase() {
         let c = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
         let seconds = (c.hour ?? 12) * 3600 + (c.minute ?? 0) * 60 + (c.second ?? 0)
-        dayPhase = Float(seconds) / 86_400
+        dayPhase = timeOfDayOverride.map { Float($0 / 24) } ?? Float(seconds) / 86_400
         // About one night in three has an aurora. Nights are counted from noon to noon.
         let night = Int((Date().timeIntervalSince1970 + Double(TimeZone.current.secondsFromGMT()) - 43_200) / 86_400)
         auroraTonight = (UInt64(truncatingIfNeeded: night) &* 2_654_435_761) % 3 == 0
@@ -449,6 +458,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(backgroundMenu())
+        let times = NSMenuItem(title: "Time of Day", action: nil, keyEquivalent: "")
+        let tsub = NSMenu()
+        for (name, hour) in Self.timesOfDay {
+            let row = action(name) { [unowned self] in
+                timeOfDayOverride = hour
+                defaults.set(name, forKey: Key.timeOfDay)
+                updateDayPhase()
+            }
+            row.state = timeOfDayOverride == hour ? .on : .off
+            tsub.addItem(row)
+        }
+        times.submenu = tsub
+        menu.addItem(times)
         menu.addItem(action(userPaused ? "Resume" : "Pause") { [unowned self] in
             userPaused.toggle()
             lastTick = CACurrentMediaTime()
