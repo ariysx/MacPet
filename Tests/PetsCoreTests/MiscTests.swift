@@ -198,3 +198,32 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.shadow), 76)
     }
 }
+
+final class MigrationTests: XCTestCase {
+    func testOldSavesMissingNewFieldsStillLoad() throws {
+        var world = makeWorld()
+        let id = addPet(&world, name: "Froggo")
+        world.update(id) { $0.wins = 7 }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("world.json")
+        try SaveStore.save(world, to: url)
+
+        // Strip fields added in later versions, as an older build would have written it.
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var w = root["world"] as! [String: Any]
+        var pets = w["pets"] as! [[String: Any]]
+        for key in ["facing", "idleFacing", "vx", "vy", "heldTargetX", "heldTargetHeight", "landSquash", "weapon", "relic", "buffs"] {
+            pets[0].removeValue(forKey: key)
+        }
+        w["pets"] = pets
+        w.removeValue(forKey: "lastDailyChestDay")
+        root["world"] = w
+        try JSONSerialization.data(withJSONObject: root).write(to: url)
+
+        let (loaded, outcome) = SaveStore.load(from: url, newSeed: 1)
+        XCTAssertEqual(outcome, .loaded)
+        XCTAssertEqual(loaded[pet: id]?.name, "Froggo")
+        XCTAssertEqual(loaded[pet: id]?.wins, 7)
+    }
+}
