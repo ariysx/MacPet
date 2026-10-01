@@ -47,19 +47,35 @@ extension RarityRanked {
 }
 
 enum BodyShape: String, Codable, CaseIterable, RarityRanked {
+    // The rarer the tier, the more mythical the animal.
     case blob, bird, cat, mouse, pig, duck
+    case hamster, puppy, chick, sheep, snail
     case bunny, frog, bear, deer, hedgehog, penguin, turtle
+    case koala, panda, squirrel, otter, goat, seal
     case ghost, fox, owl, raccoon, axolotl
+    case redPanda, lion, chameleon, pangolin, fruitBat, peacock
     case dragon
+    case kitsune, griffin, pegasus, jackalope, qilin, mothkin, wyvern
     case unicorn
+    case phoenix, spiritStag, skyWhale, thunderbird, sphinx, cerberus
 
     var rarity: Rarity {
         switch self {
-        case .blob, .bird, .cat, .mouse, .pig, .duck: return .common
-        case .bunny, .frog, .bear, .deer, .hedgehog, .penguin, .turtle: return .uncommon
-        case .ghost, .fox, .owl, .raccoon, .axolotl: return .rare
-        case .dragon: return .epic
-        case .unicorn: return .legendary
+        case .blob, .bird, .cat, .mouse, .pig, .duck,
+             .hamster, .puppy, .chick, .sheep, .snail: return .common
+        case .bunny, .frog, .bear, .deer, .hedgehog, .penguin, .turtle,
+             .koala, .panda, .squirrel, .otter, .goat, .seal: return .uncommon
+        case .ghost, .fox, .owl, .raccoon, .axolotl,
+             .redPanda, .lion, .chameleon, .pangolin, .fruitBat, .peacock: return .rare
+        case .dragon, .kitsune, .griffin, .pegasus, .jackalope, .qilin, .mothkin, .wyvern: return .epic
+        case .unicorn, .phoenix, .spiritStag, .skyWhale, .thunderbird, .sphinx, .cerberus: return .legendary
+        }
+    }
+
+    /// Display name: "red panda" rather than "redPanda".
+    var title: String {
+        rawValue.reduce(into: "") { out, c in
+            if c.isUppercase { out += " " + c.lowercased() } else { out.append(c) }
         }
     }
 }
@@ -214,7 +230,7 @@ struct Looks: Codable, Equatable {
     }
 
     var summary: String {
-        var parts = ["\(colourName.capitalized) \(shape.rawValue)"]
+        var parts = ["\(colourName.capitalized) \(shape.title)"]
         if pattern != .plain { parts.append(Self.words(pattern.rawValue)) }
         if accessory != .none { parts.append(Self.words(accessory.rawValue)) }
         if eyes != .dot { parts.append("\(Self.words(eyes.rawValue)) eyes") }

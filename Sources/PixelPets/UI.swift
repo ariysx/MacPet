@@ -419,7 +419,7 @@ final class PlayUI {
         // Experience toward the next level, under the portrait.
         canvas.fill(UIRect(x: r.x + 5, y: r.y + 43, w: 36, h: 3), Ink.make(.dark, .outline))
         canvas.fill(UIRect(x: r.x + 5, y: r.y + 43, w: Int(36 * pet.levelProgress), h: 3), Ink.make(.blue, .light))
-        canvas.text(pet.looks.shape.rawValue.uppercased() + " " + pet.feeling.title.uppercased(), tx, r.y + 36, PlayUI.grey)
+        canvas.text(pet.looks.shape.title.uppercased() + " " + pet.feeling.title.uppercased(), tx, r.y + 36, PlayUI.grey)
         let close = UIRect(x: r.x + r.w - 11, y: r.y + 4, w: 8, h: 9)
         canvas.text("×", close.x + 1, close.y + 1, PlayUI.white)
         cardClose = close

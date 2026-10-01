@@ -65,7 +65,7 @@ final class ProgressTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(world.dex.count, World.dexMilestone)
         XCTAssertTrue(world.loot.isEmpty)
         XCTAssertTrue(world.events.isEmpty)
-        XCTAssertEqual(DexEntry.total, 20 + PetPalette.colourways.count + 12 + 15 + 9)
+        XCTAssertEqual(DexEntry.total, BodyShape.allCases.count + PetPalette.colourways.count + 12 + 15 + 9)
     }
 
     func testMysteryAndShinyEggsArePlaced() {

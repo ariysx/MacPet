@@ -182,7 +182,8 @@ enum SpeciesRig {
         case .ghost: return ghost(pose)
         case .fox: return fox(pose)
         case .dragon: return dragon(pose)
-        default: return buildMore(shape, pose: pose) ?? cat(pose)
+        default: return buildMore(shape, pose: pose) ?? buildWave3(shape, pose: pose) ?? buildWave4(shape, pose: pose)
+            ?? buildWave5(shape, pose: pose) ?? cat(pose)
         }
     }
 
@@ -897,7 +898,7 @@ struct FrontProfile {
     var flippers = false
 
     static func of(_ shape: BodyShape) -> FrontProfile {
-        if let p = more(shape) { return p }
+        if let p = more(shape) ?? wave3(shape) ?? wave4(shape) ?? wave5(shape) { return p }
         var p = FrontProfile()
         switch shape {
         case .blob:
@@ -932,6 +933,10 @@ struct FrontProfile {
 
 extension SpeciesRig {
     static func frontal(_ shape: BodyShape, pose: Pose, back: Bool) -> Built {
+        if let custom = frontalWave3(shape, pose: pose, back: back) ?? frontalWave4(shape, pose: pose, back: back)
+            ?? frontalWave5(shape, pose: pose, back: back) {
+            return custom
+        }
         let p = FrontProfile.of(shape)
         var b = Built()
         let squash = pose.squash

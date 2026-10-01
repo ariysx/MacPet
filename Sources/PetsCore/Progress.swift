@@ -42,7 +42,7 @@ enum DexEntry: Hashable {
 
     var title: String {
         switch self {
-        case .shape(let s): return s.rawValue
+        case .shape(let s): return s.title
         case .pattern(let p): return p.rawValue + " pattern"
         case .accessory(let a): return a == .none ? "no hat" : a.rawValue
         case .eyes(let e): return e.rawValue + " eyes"
