@@ -477,22 +477,50 @@ enum PropArt {
         return parts
     }
 
-    static let impactFrames = 4
+    static let impactFrames = 6
 
-    /// A hit: a white-hot star that bursts and breaks up.
-    static func impact(_ i: Int) -> PixelSprite {
+    /// A hit, as anime-style impact frames: a white flash with speed lines, a starburst, then a
+    /// ring and sparks that fly apart. `big` (crits, heavy and finishing blows) is larger and hotter.
+    static func impact(_ i: Int, big: Bool = false) -> PixelSprite {
         let t = Double(i) / Double(impactFrames - 1)
         let c = V2(16, 16)
-        let outer = 5 + t * 8, inner = 1.5 + t * 2.5
-        let star = (0..<12).map { k -> V2 in
-            let a = Double(k) / 12 * 2 * .pi + t * 0.4
-            return c + V2(cos(a), sin(a)) * (k % 2 == 0 ? outer : inner)
+        let s = big ? 1.35 : 1.0
+        var parts: [Part] = []
+        switch i {
+        case 0:
+            // The impact frame itself: a solid white flash with radiating speed lines.
+            parts.append(Part(.ellipse(c: c, r: V2(5, 5) * s, angle: 0), .white, z: 1, group: 0, fixedTone: .light))
+            for k in 0..<10 {
+                let a = Double(k) / 10 * 2 * .pi + 0.2
+                let d = V2(cos(a), sin(a))
+                parts.append(Part(.capsule(a: c + d * 6 * s, b: c + d * (k % 2 == 0 ? 14 : 11) * s, ra: 0.9, rb: 0.3),
+                                  .white, z: 0.5, group: 1, innerOutline: false, fixedTone: .light))
+            }
+        case 1, 2:
+            // Starburst: long thin rays, gold edged, with a white-hot core.
+            let outer = (i == 1 ? 11.0 : 13.0) * s, inner = (i == 1 ? 3.0 : 3.6) * s
+            let star = (0..<16).map { k -> V2 in
+                let a = Double(k) / 16 * 2 * .pi + Double(i) * 0.2
+                return c + V2(cos(a), sin(a)) * (k % 2 == 0 ? outer * (k % 4 == 0 ? 1 : 0.7) : inner)
+            }
+            parts.append(Part(.polygon(star), big ? .red : .gold, z: 0, group: 0, fixedTone: .light))
+            parts.append(Part(.ellipse(c: c, r: V2(inner, inner) * 1.2, angle: 0), .white, z: 1, group: 1, fixedTone: .light))
+        default:
+            // A ring that widens and thins, and sparks thrown outward.
+            let r = (8 + t * 7) * s
+            parts.append(Part(.ring(c: c, r: V2(r, r * 0.9), width: max(0.8, 2.6 - t * 2.2)), big ? .gold : .white,
+                              z: 0, group: 0, innerOutline: false, fixedTone: .light))
+            for k in 0..<6 {
+                let a = Double(k) / 6 * 2 * .pi + 0.5
+                let d = V2(cos(a), sin(a))
+                let p = c + d * (r + 2 + t * 3)
+                parts.append(Part(.ellipse(c: p, r: V2(1, 1) * (1.4 - t * 0.6), angle: 0), big ? .red : .gold,
+                                  z: 0.5, group: 2 + k, innerOutline: false, fixedTone: .light))
+            }
         }
-        var parts = [Part(.polygon(star), .gold, z: 0, group: 0, fixedTone: i == 0 ? .light : .base)]
-        if i < 2 { parts.append(Part(.ellipse(c: c, r: V2(inner, inner) * 1.1, angle: 0), .white, z: 1, group: 1, fixedTone: .light)) }
         var sprite = Rig.render(parts, size: 64, scale: 2)
-        if t > 0.5 {
-            for y in 0..<64 { for x in 0..<64 where hash01(x / 2, y / 2, i + 40) < (t - 0.4) * 1.1 { sprite[x, y] = Ink.clear } }
+        if i >= 4 {
+            for y in 0..<64 { for x in 0..<64 where hash01(x / 2, y / 2, i + 40) < (t - 0.5) * 1.2 { sprite[x, y] = Ink.clear } }
         }
         return sprite
     }
@@ -516,6 +544,47 @@ enum PropArt {
         }
         return sprite
     }
+
+    static let iconFrames = 4
+
+    /// One frame of an icon's little loop: hearts beat, Zs rise, rain falls, sparkles twinkle,
+    /// the alarm bounces. Drawn in the 11 x 11 corner the shader reads.
+    static func icon(_ kind: IconKind, frame f: Int) -> PixelSprite {
+        var base = icon(kind)
+        var offset = (x: 1, y: 1)
+        switch kind {
+        case .heart:
+            if f == 1 { base = bigHeart; offset = (0, 0) }
+        case .zz:
+            offset = (1, 3 - f) // the Zs drift up and start again
+        case .cloud:
+            let drops = ["..b..b...", ".b..b..b.", "...b..b.."]
+            var rows: [String] = ["...sss...", ".sSSssss.", "sSsssssst", "ssssssstt", ".ttttttt."]
+            for k in 0..<3 { rows.append(drops[(k + 3 - f % 3) % 3]) } // the drops fall a row each frame
+            base = PixelSprite(stamp: rows)
+        case .sparkle:
+            if f % 2 == 1 { base = base.mirrored() }
+            if f >= 2 { base = base.replacing(Ink.make(.white, .light), with: Ink.make(.gold, .light)) }
+        case .exclamation:
+            offset = (1, [1, 0, 1, 2][f % 4])
+        case .drumstick, .face:
+            offset = ([1, 2, 1, 0][f % 4], 1)
+        }
+        var out = PixelSprite(width: 11, height: 11)
+        out.draw(base, x: offset.x, y: offset.y)
+        return out
+    }
+
+    private static let bigHeart = PixelSprite(stamp: [
+        ".rrr.rrr..",
+        "rRRrrrrrr.",
+        "rRrrrrrrrq",
+        "rrrrrrrrrq",
+        ".rrrrrrrq.",
+        "..rrrrrq..",
+        "...rrrq...",
+        "....rq....",
+        ".....q...."])
 
     /// 10 x 10 icons drawn in the top-left of a tile. A dark drop shadow is added by the atlas.
     static func icon(_ kind: IconKind) -> PixelSprite {

@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         static let notifications = "notifications"
         static let background = "background"
         static let timeOfDay = "timeOfDay"
+        static let weather = "weather"
     }
 
     private static let timesOfDay: [(String, Double?)] = [("Live", nil), ("Dawn", 6.5), ("Day", 12), ("Dusk", 19.3), ("Night", 23.5)]
@@ -84,7 +85,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var fps: Int { defaults.integer(forKey: Key.fps) }
     private var notificationsOn: Bool { defaults.bool(forKey: Key.notifications) }
     private var running: Bool { !userPaused && !screensAsleep }
-    var renderTime: Double { CACurrentMediaTime() - startTime }
+    /// Animation time. It stands still during a hit-stop, so a big blow lands with a jolt.
+    var renderTime: Double {
+        let t = CACurrentMediaTime()
+        return (t < freezeEnd ? freezeStart : t - (freezeEnd - freezeStart)) - startTime - frozenTotal
+    }
+    private var freezeStart = 0.0, freezeEnd = 0.0, frozenTotal = 0.0
+    private var shakeUntil = 0.0, shakeAmount: Float = 0
+    private var flashStart = -10.0
+    private var boltX: Float = -1
+
+    /// Holds every animation still for a moment.
+    private func hitStop(_ seconds: Double) {
+        let t = CACurrentMediaTime()
+        if t >= freezeEnd {
+            frozenTotal += freezeEnd - freezeStart
+            freezeStart = t
+            freezeEnd = t + seconds
+        } else {
+            freezeEnd = max(freezeEnd, t + seconds)
+        }
+    }
+
+    private func shake(_ amount: Float, for seconds: Double) {
+        shakeUntil = max(shakeUntil, CACurrentMediaTime() + seconds)
+        shakeAmount = max(shakeAmount, amount)
+    }
+
+    /// Grid pixels to nudge the scene by this frame.
+    var shakeOffset: SIMD2<Float> {
+        let t = CACurrentMediaTime()
+        guard t < shakeUntil else { shakeAmount = 0; return .zero }
+        let a = shakeAmount * Float(min(1, (shakeUntil - t) / 0.15))
+        return SIMD2((Float.random(in: -1...1) * a).rounded(), (Float.random(in: -1...1) * a).rounded())
+    }
+
+    /// Lightning: a bright double flicker that fades, and the bolt's position.
+    var lightningFlash: (flash: Float, bolt: Float) {
+        let age = CACurrentMediaTime() - flashStart
+        guard age < 0.7 else { return (0, -1) }
+        let flicker: Double = age < 0.08 ? 1 : age < 0.14 ? 0.2 : age < 0.22 ? 0.9 : max(0, 0.6 * (1 - (age - 0.22) / 0.48))
+        return (Float(flicker), age < 0.3 ? boltX : -1)
+    }
 
     nonisolated private static func readSpeed() -> Double {
         max(1, Double(ProcessInfo.processInfo.environment["PIXELPETS_SPEED"] ?? "") ?? 1)
@@ -95,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         (world, loadOutcome) = SaveStore.load(from: saveURL, newSeed: UInt64.random(in: 1...UInt64.max))
         timeOfDayOverride = Self.timesOfDay.first { $0.0 == defaults.string(forKey: Key.timeOfDay) }?.1
         world.localHour = { timeOfDayOverride ?? World.systemLocalHour() }
+        world.weatherOverride = defaults.string(forKey: Key.weather).flatMap(Weather.init(rawValue:))
         defaults.register(defaults: [Key.fps: 30, Key.notifications: true])
 
         guard let renderer = PetsRenderer() else {
@@ -154,12 +197,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastTick = now
         updateDayPhase()
         guard running else { return }
+        guard now >= freezeEnd else { return } // hit-stop: the world holds its breath
 
         world.advance(by: dt * speed)
         let events = world.events
         world.events.removeAll()
         for event in events { handle(event) }
         showHits()
+        showLightning()
         syncSprites()
 
         if playMode && now - lastInput > 120 { setPlayMode(false) }
@@ -382,7 +427,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if status != noErr { petsLog("could not register ⌥⌘P (status \(status))") }
     }
 
+    private func showLightning() {
+        guard let x = world.lightning.last else { return }
+        world.lightning.removeAll()
+        flashStart = CACurrentMediaTime()
+        // The shader draws the bolt in landscape design units (480 across).
+        boltX = Float(x / World.width * 480)
+        shake(1, for: 0.25)
+    }
+
     /// Turns the blows landed this tick into bursts and, in play mode, damage numbers.
+    /// Crits, heavy blows and the finishing blow stop time for an instant and shake the scene.
     private func showHits() {
         let now = renderTime
         effects.removeAll { now - $0.born > SceneEffect.duration }
@@ -390,10 +445,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for hit in world.hits {
             let x = Float(hit.x) * SceneBuilder.worldScale
             let y = ground + Float(hit.height) * SceneBuilder.worldScale + 20
-            effects.append(SceneEffect(x: x, y: y, born: now))
+            effects.append(SceneEffect(x: x, y: y, born: now, big: hit.crit || hit.finishing || hit.heavy))
+            if hit.finishing {
+                hitStop(0.22)
+                shake(4, for: 0.35)
+            } else if hit.crit || hit.heavy {
+                hitStop(0.09)
+                shake(hit.heavy ? 3 : 2, for: 0.2)
+            } else {
+                hitStop(0.045)
+            }
             if playMode {
-                playUI.toast("-\(Int(hit.damage.rounded()))", ink: hit.onMonster ? PlayUI.white : Ink.make(.red, .light),
-                             atGrid: SIMD2(x, y + 40))
+                let text = hit.finishing ? "K.O.!" : hit.crit ? "CRIT -\(Int(hit.damage.rounded()))" : "-\(Int(hit.damage.rounded()))"
+                let ink = hit.finishing || hit.crit ? Ink.make(.gold, .light) : hit.onMonster ? PlayUI.white : Ink.make(.red, .light)
+                playUI.toast(text, ink: ink, atGrid: SIMD2(x, y + 40))
             }
         }
         world.hits.removeAll()
@@ -588,6 +653,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         times.submenu = tsub
         menu.addItem(times)
+        let weather = NSMenuItem(title: "Weather", action: nil, keyEquivalent: "")
+        let wsub = NSMenu()
+        for choice in [nil] + Weather.allCases.map(Optional.some) {
+            let row = action(choice?.title ?? "Live") { [unowned self] in
+                world.weatherOverride = choice
+                defaults.set(choice?.rawValue, forKey: Key.weather)
+            }
+            row.state = world.weatherOverride == choice ? .on : .off
+            wsub.addItem(row)
+        }
+        weather.submenu = wsub
+        menu.addItem(weather)
         menu.addItem(action(userPaused ? "Resume" : "Pause") { [unowned self] in
             userPaused.toggle()
             lastTick = CACurrentMediaTime()

@@ -219,7 +219,10 @@ final class PetsView: MTKView {
                                      rain: Float(app.world.rain),
                                      playMode: app.playMode ? 1 : 0,
                                      itemCount: UInt32(items.count),
-                                     background: app.backgroundInfo)
+                                     background: app.backgroundInfo,
+                                     flash: app.lightningFlash.flash,
+                                     shake: app.shakeOffset,
+                                     bolt: app.lightningFlash.bolt)
         var ui = PetsRenderer.UIUniforms()
         if isMain && app.playMode {
             let playUI = app.playUI

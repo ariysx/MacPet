@@ -1,7 +1,7 @@
 import Foundation
 
 // The frame data handed to Shaders.metal. These layouts must match the Metal structs
-// exactly; PetsCoreTests checks the strides (64 and 80 bytes).
+// exactly; PetsCoreTests checks the strides (96 and 80 bytes).
 
 struct SceneUniforms {          // buffer(0)
     var resolution: SIMD2<Float>   // drawable size in real pixels
@@ -12,6 +12,9 @@ struct SceneUniforms {          // buffer(0)
     var playMode: Float            // 0 or 1
     var itemCount: UInt32
     var background: SIMD3<UInt32> = .zero // x: 1 image, 2 aurora tonight; y, z: image size
+    var flash: Float = 0                  // 0..1 lightning brightness
+    var shake: SIMD2<Float> = .zero       // grid px the scene is nudged by, for heavy hits
+    var bolt: Float = -1                  // design-unit x of a lightning bolt, < 0 = none
 }
 
 struct SceneItem {              // buffer(1), array of up to 32
@@ -25,6 +28,8 @@ struct SceneItem {              // buffer(1), array of up to 32
         static let blinkHealth = Flags(rawValue: 1 << 2)
         static let eggBar = Flags(rawValue: 1 << 3)
         static let monsterBar = Flags(rawValue: 1 << 4)
+        /// The first frames of a hit: the whole sprite flashes white.
+        static let whiteFlash = Flags(rawValue: 1 << 5)
     }
 
     var position: SIMD2<Float> = .zero     // grid px, bottom-centre of the sprite

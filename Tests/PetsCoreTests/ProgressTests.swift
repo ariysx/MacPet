@@ -198,3 +198,31 @@ final class DurabilityAndAmberTests: XCTestCase {
         XCTAssertFalse(Item.lootable.contains(.timelessAmber), "only from its own rare drops")
     }
 }
+
+final class WeatherTests: XCTestCase {
+    func testWeatherIntensityAndStormLightning() {
+        var world = makeWorld()
+        world.weatherOverride = .drizzle
+        world.advance(by: 200)
+        XCTAssertEqual(world.rain, Weather.drizzle.intensity, accuracy: 0.01)
+        XCTAssertTrue(world.lightning.isEmpty, "no lightning in a drizzle")
+        world.weatherOverride = .storm
+        world.advance(by: 200)
+        XCTAssertEqual(world.rain, 1, accuracy: 0.01)
+        XCTAssertFalse(world.lightning.isEmpty)
+        XCTAssertTrue(world.lightning.allSatisfy { $0 > 0 && $0 < World.width })
+        world.weatherOverride = .clear
+        world.advance(by: 200)
+        XCTAssertEqual(world.rain, 0, accuracy: 0.01)
+    }
+
+    func testRainComesInThreeKinds() {
+        var world = makeWorld()
+        var seen = Set<Weather>()
+        for _ in 0..<400 {
+            world.advance(by: 3600)
+            seen.insert(world.weather)
+        }
+        XCTAssertTrue(seen.isSuperset(of: [.drizzle, .rain, .storm]))
+    }
+}

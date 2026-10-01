@@ -189,12 +189,15 @@ final class SaveTests: XCTestCase {
 
 final class LayoutTests: XCTestCase {
     func testStridesMatchMetal() {
-        XCTAssertEqual(MemoryLayout<SceneUniforms>.stride, 64)
+        XCTAssertEqual(MemoryLayout<SceneUniforms>.stride, 96)
         XCTAssertEqual(MemoryLayout<SceneItem>.stride, 80)
         XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.primary), 16)
         XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.icon), 64)
         XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.itemCount), 32)
         XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.background), 48)
+        XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.flash), 64)
+        XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.shake), 72)
+        XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.bolt), 80)
         XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.shadow), 76)
     }
 }

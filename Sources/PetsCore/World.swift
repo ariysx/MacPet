@@ -61,9 +61,15 @@ struct World: Codable {
     var monster: Monster?
     var pellets: [Pellet] = []
     var smoke: SmokePuff?
-    /// 0...1, eases toward 1 while it rains.
+    /// 0...1, eases toward the weather's intensity.
     var rain: Double = 0
     var rainRemaining: Double = 0
+    var weather: Weather = .clear
+    /// Set from the menu to hold one kind of weather; nil lets it change by itself.
+    var weatherOverride: Weather?
+    private var lightningTimer: Double = 0
+    /// Lightning strikes since the app last looked, as x positions. The app drains this.
+    var lightning: [Double] = []
     var playerHitCooldown: Double = 0
     /// Things the app may want to notify about. The app drains this.
     var events: [WorldEvent] = []
@@ -446,18 +452,30 @@ struct World: Codable {
         smoke = puff.age >= SmokePuff.duration ? nil : puff
     }
 
-    /// About once a day, 20 to 40 minutes of rain. Purely for looks.
+    /// About twice a day, 20 to 40 minutes of drizzle, rain or a thunderstorm. Purely for looks.
     private mutating func updateRain(dt: Double) {
         rainTimer += dt
         if rainTimer >= 3600 {
             rainTimer -= 3600
-            if rainRemaining <= 0 && random.chance(1.0 / 24) {
+            if rainRemaining <= 0 && random.chance(1.0 / 12) {
                 rainRemaining = random.double(in: 1200...2400)
+                let r = random.nextDouble()
+                weather = r < 0.45 ? .drizzle : r < 0.8 ? .rain : .storm
             }
         }
         rainRemaining = max(0, rainRemaining - dt)
-        let target: Double = rainRemaining > 0 ? 1 : 0
-        rain += (target - rain) * min(1, dt / 20)
+        if rainRemaining <= 0 { weather = .clear }
+        let now = weatherOverride ?? weather
+        rain += (now.intensity - rain) * min(1, dt / 20)
+
+        // Storms throw lightning every 6 to 20 s once the rain is heavy.
+        if now == .storm && rain > 0.7 {
+            lightningTimer -= dt
+            if lightningTimer <= 0 {
+                lightningTimer = random.double(in: 6...20)
+                lightning.append(random.double(in: 20...(World.width - 20)))
+            }
+        }
     }
 
     // MARK: Player actions (play mode)
@@ -610,6 +628,29 @@ struct World: Codable {
             pets[i].isWalking = false
             // Saves from before durability: weapons start fresh.
             if let weapon = pets[i].weapon, pets[i].weaponDurability <= 0 { pets[i].weaponDurability = weapon.maxDurability }
+        }
+    }
+}
+
+enum Weather: String, CaseIterable {
+    case clear, drizzle, rain, storm
+
+    /// How hard it rains, 0...1.
+    var intensity: Double {
+        switch self {
+        case .clear: return 0
+        case .drizzle: return 0.35
+        case .rain: return 0.65
+        case .storm: return 1
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .clear: return "Clear"
+        case .drizzle: return "Light Rain"
+        case .rain: return "Rain"
+        case .storm: return "Thunderstorm"
         }
     }
 }

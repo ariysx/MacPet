@@ -5,7 +5,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-// Must match SceneTypes.swift exactly (64 and 80 bytes).
+// Must match SceneTypes.swift exactly (96 and 80 bytes; uint3 takes 16).
 struct SceneUniforms {
     float2 resolution;   // drawable size in real pixels
     float2 grid;         // virtual grid size, e.g. 480 x 300
@@ -15,6 +15,9 @@ struct SceneUniforms {
     float  playMode;     // 0 or 1
     uint   itemCount;
     uint3  background;   // x: 1 image, 2 aurora tonight; y, z: image size
+    float  flash;        // 0..1 lightning brightness
+    float2 shake;        // grid px the scene is nudged by
+    float  bolt;         // design-unit x of a lightning bolt, < 0 = none
 };
 
 struct SceneItem {
@@ -47,6 +50,7 @@ constant uint kHurt = 2;
 constant uint kBlinkHealth = 4;
 constant uint kEggBar = 8;
 constant uint kMonsterBar = 16;
+constant uint kWhiteFlash = 32;
 
 constant uint kBackgroundImage = 1;
 constant uint kAurora = 2;
@@ -255,6 +259,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
     float v = clamp((p.y - groundTop) / skyH, 0.0, 1.0);
     float3 col;
     bool clouded = false; // anything solid in front of the sky: no stars there
+    bool land = false;    // mountains, hills and trees: lightning passes behind these
 
     if ((u.background.x & kBackgroundImage) != 0u && u.background.y > 0u) {
         // A picture chosen by the user, cropped to fill, lit for the time of day.
@@ -327,6 +332,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             if (p.y < forest) rock = face > 0.5 ? float3(0.36, 0.55, 0.56) : float3(0.28, 0.45, 0.50);
             col = mix(rock, bottom, 0.38) * tint;
             clouded = true;
+            land = true;
         }
 
         // Far hills, hazy teal, with a fringe of tiny treetops.
@@ -337,6 +343,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             if (p.y > farH - 3.0 && p.y <= farH - 1.0 && checker(pixel)) c = float3(0.47, 0.72, 0.68);
             col = mix(c, bottom, 0.25) * tint;
             clouded = true;
+            land = true;
         }
 
         // Mid hills with clumps of pines and round bushes.
@@ -352,6 +359,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             if (pine(p, pixel, tx, baseY, h, float3(0.15, 0.36, 0.30), float3(0.22, 0.48, 0.36), float3(0.36, 0.62, 0.40), c)) {
                 col = mix(c, bottom, 0.12) * tint;
                 clouded = true;
+                land = true;
             }
         }
         if (p.y < midH) {
@@ -359,6 +367,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             float3 c = l > 0.62 ? float3(0.46, 0.72, 0.44) : l < 0.3 ? float3(0.30, 0.56, 0.38) : float3(0.37, 0.64, 0.41);
             col = mix(c, bottom, 0.1) * tint;
             clouded = true;
+            land = true;
         }
 
         // The big oak in the back meadow: clustered foliage on a gnarled trunk.
@@ -373,6 +382,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             if (bark > 0.7) c *= 0.82;
             col = c * tint;
             clouded = true;
+            land = true;
         }
         float best = -9.0, bestZ = -1e9;
         float treeGust = gust(treeAt.x, u.time);
@@ -397,6 +407,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
                              float3(0.42, 0.70, 0.33), float3(0.64, 0.82, 0.35));
             col = c * tint;
             clouded = true;
+            land = true;
         }
 
         // A few leaves drift down from the oak and blow away with the wind.
@@ -520,14 +531,63 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         }
     }
 
-    // Rain: 1-pixel diagonal streaks.
+    // Rain clouds: the sky turns grey, heavier the harder it rains.
+    if (u.rain > 0.01 && p.y > groundTop && !land) {
+        float lum = dot(col, float3(0.30, 0.55, 0.15));
+        float3 overcast = float3(lum) * float3(0.86, 0.90, 1.0) * 0.82;
+        col = mix(col, overcast, 0.25 * u.rain + 0.45 * smoothstep(0.6, 1.0, u.rain));
+    }
+
+    // Lightning: the sky lights up, and a jagged bolt drops to the far hills.
+    if (u.flash > 0.0) {
+        bool sky = p.y > groundTop && !land;
+        col = mix(col, float3(0.86, 0.90, 1.0), u.flash * (sky ? 0.55 : 0.28));
+        if (u.bolt >= 0.0 && sky) {
+            float seed = floor(u.bolt * 7.0);
+            float seg = 14.0;
+            float y0 = floor(p.y / seg);
+            float t = fract(p.y / seg);
+            float a = (hash11(y0 + seed) - 0.5) * 16.0, b = (hash11(y0 + 1.0 + seed) - 0.5) * 16.0;
+            float bx = u.bolt + mix(a, b, t);
+            float d = abs(p.x - bx);
+            if (d < 1.4) col = float3(1.0, 1.0, 0.96);
+            else if (d < 3.0) col = mix(col, float3(0.80, 0.86, 1.0), 0.5 * u.flash);
+        }
+    }
+
+    // Rain: thin diagonal streaks, sparse in a drizzle and dense in a storm, darkening the day.
     if (u.rain > 0.01) {
-        col *= mix(1.0, 0.82, u.rain);
-        float lane = pixel.x - pixel.y;
-        float hl = hash11(lane * 0.731);
-        if (hl < 0.25 * u.rain) {
-            float s2 = pixel.y + u.time * 240.0 + hl * 997.0;
-            if (pmod(s2, 74.0 + floor(hl * 80.0)) < 8.0) col = mix(col, float3(0.78, 0.84, 0.95), 0.6);
+        col *= 1.0 - 0.10 * u.rain - 0.14 * smoothstep(0.7, 1.0, u.rain);
+        float lane = pixel.x - pixel.y * (0.5 + 0.3 * u.rain);
+        float hl = hash11(floor(lane) * 0.731);
+        if (hl < 0.13 * u.rain) {
+            float speed = 200.0 + 160.0 * u.rain;
+            float s2 = pixel.y + u.time * speed + hl * 997.0;
+            if (pmod(s2, 90.0 + floor(hl * 400.0)) < 3.0 + 5.0 * u.rain) col = mix(col, float3(0.78, 0.84, 0.95), 0.5);
+        }
+
+        // Splashes where drops hit the meadow: a dot, then a little crown and a ripple.
+        if (p.y < walk + 26.0) {
+            float2 cellSize = float2(11.0, 7.0) * k;
+            float2 site = floor(pixel / cellSize);
+            float h = hash21(site * 1.37 + 3.1);
+            if (h < 0.6 * u.rain) {
+                float phase = fract(u.time * (1.1 + h * 0.8) + h * 13.0);
+                if (phase < 0.25) {
+                    float2 c = site * cellSize + floor(float2(hash21(site + 5.0), hash21(site + 9.0)) * (cellSize - 6.0 * k)) + 3.0 * k;
+                    float2 q = floor((pixel - c) / k); // drawn in landscape pixels, like the art
+                    float t = phase / 0.25;
+                    float r = floor(1.0 + 3.0 * t);
+                    float up = floor(2.5 * sin(t * 3.14159));
+                    bool hit = false;
+                    if (t < 0.2) hit = q.x == 0.0 && q.y == 0.0;
+                    else {
+                        hit = (abs(q.x) == r && q.y == up) || (abs(q.x) == r - 1.0 && q.y == up + 1.0 && t < 0.6);
+                        hit = hit || (q.y == -1.0 && abs(q.x) <= r + 1.0 && abs(q.x) >= r - 1.0 && t > 0.4);
+                    }
+                    if (hit) col = mix(col, float3(0.86, 0.92, 1.0), 0.8 * (1.0 - 0.5 * t));
+                }
+            }
         }
     }
     return col;
@@ -601,6 +661,8 @@ static float3 drawItem(constant SceneItem& it, float2 g, float groundTop, float3
             float3 c = inkColour(ink, it.primary.rgb, it.secondary.rgb);
             if ((it.flags & kHurt) != 0u) c = mix(c, float3(1.0, 0.25, 0.25), 0.55);
             col = c * light;
+            // Impact frame: a pure white silhouette for the first instant of a hit.
+            if ((it.flags & kWhiteFlash) != 0u) col = float3(1.0, 0.98, 0.94);
         }
     }
 
@@ -672,7 +734,8 @@ fragment float4 petsFragment(VOut in [[stage_in]],
     // Snap every screen pixel to its cell on the virtual grid, origin bottom-left.
     float cell = u.resolution.x / u.grid.x;
     float2 frag = float2(in.position.x, u.resolution.y - in.position.y);
-    float2 g = floor(frag / cell);
+    float2 gUI = floor(frag / cell);
+    float2 g = gUI - u.shake; // heavy hits shake the scene, not the UI
     float k = u.grid.x / 480.0;
     float groundTop = floor(u.grid.y * 0.22 / k) * k; // the walking line
     // Sprites share the scene's light, a little brighter so pets stay readable at night.
@@ -691,7 +754,7 @@ fragment float4 petsFragment(VOut in [[stage_in]],
     if (uu.enabled != 0u) {
         int uw = int(ui.get_width()), uh = int(ui.get_height());
         float s = u.grid.x / float(uw); // grid pixels per UI pixel
-        int ux = int(g.x / s), uy = uh - 1 - int(g.y / s);
+        int ux = int(gUI.x / s), uy = uh - 1 - int(gUI.y / s);
         if (ux >= 0 && uy >= 0 && ux < uw && uy < uh) {
             uint ink = ui.read(uint2(uint(ux), uint(uy))).r;
             if (ink == 255u) col = mix(col, float3(0.08, 0.07, 0.12), 0.62);

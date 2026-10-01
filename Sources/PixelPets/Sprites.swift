@@ -26,7 +26,9 @@ enum StaticSprite: Hashable {
     case weapon(Item)
     case smoke(Int)
     case impact(Int)
+    case bigImpact(Int)
     case icon(IconKind)
+    case iconFrame(IconKind, Int)
 }
 
 /// One r8Uint atlas of 32 x 32 tiles, 16 across. Fixed sprites (monsters, props, icons) are
@@ -63,7 +65,11 @@ struct SpriteAtlas {
         for item in Item.allCases where item.category == .weapon { small.append((.weapon(item), PropArt.weapon(item))) }
         for i in 0..<PropArt.smokeFrames { small.append((.smoke(i), PropArt.smoke(i))) }
         for i in 0..<PropArt.impactFrames { small.append((.impact(i), PropArt.impact(i))) }
-        for kind in IconKind.allCases { small.append((.icon(kind), shadowed(PropArt.icon(kind)))) }
+        for i in 0..<PropArt.impactFrames { small.append((.bigImpact(i), PropArt.impact(i, big: true))) }
+        for kind in IconKind.allCases {
+            small.append((.icon(kind), shadowed(PropArt.icon(kind, frame: 0))))
+            for f in 1..<PropArt.iconFrames { small.append((.iconFrame(kind, f), shadowed(PropArt.icon(kind, frame: f)))) }
+        }
 
         // 2x2 blocks first, packed along pairs of rows; then single tiles in the gaps.
         var occupied = Set<Int>()
@@ -109,6 +115,12 @@ struct SpriteAtlas {
     }
 
     func tile(_ key: StaticSprite) -> UInt32 { tiles[key] ?? 0 }
+
+    /// An icon's tile for this moment of its loop, at 4 frames a second.
+    func iconTile(_ kind: IconKind, time: Double) -> UInt32 {
+        let f = Int(time * 4) % PropArt.iconFrames
+        return tile(f == 0 ? .icon(kind) : .iconFrame(kind, f))
+    }
 
     func petTile(region: Int, view: PetView, anim: PetAnim, frame: Int, baby: Bool) -> UInt32 {
         regionTiles[region % regionTiles.count][PetComposer.frameIndex(view: view, anim: anim, frame: frame, baby: baby)]

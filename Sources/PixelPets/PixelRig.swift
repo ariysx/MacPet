@@ -110,6 +110,18 @@ struct PixelSprite: Equatable {
         set { if x >= 0 && y >= 0 && x < width && y < height { pixels[y * width + x] = newValue } }
     }
 
+    func mirrored() -> PixelSprite {
+        var out = PixelSprite(width: width, height: height)
+        for y in 0..<height { for x in 0..<width { out[width - 1 - x, y] = self[x, y] } }
+        return out
+    }
+
+    func replacing(_ ink: UInt8, with other: UInt8) -> PixelSprite {
+        var out = self
+        for y in 0..<height { for x in 0..<width where out[x, y] == ink { out[x, y] = other } }
+        return out
+    }
+
     func upscaled(by k: Int) -> PixelSprite {
         var out = PixelSprite(width: width * k, height: height * k)
         for y in 0..<out.height { for x in 0..<out.width { out[x, y] = self[x / k, y / k] } }

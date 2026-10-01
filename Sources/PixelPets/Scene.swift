@@ -19,6 +19,8 @@ struct SceneEffect {
     var x: Float
     var y: Float
     var born: Double
+    /// Crits, heavy blows and finishing blows burst bigger.
+    var big = false
     static let duration = 0.32
 }
 
@@ -44,7 +46,8 @@ enum SceneBuilder {
             guard age >= 0 && age < SceneEffect.duration else { continue }
             var item = SceneItem()
             item.position = SIMD2(effect.x, effect.y - 32)
-            item.tile = atlas.tile(.impact(min(PropArt.impactFrames - 1, Int(age / SceneEffect.duration * Double(PropArt.impactFrames)))))
+            let frame = min(PropArt.impactFrames - 1, Int(age / SceneEffect.duration * Double(PropArt.impactFrames)))
+            item.tile = atlas.tile(effect.big ? .bigImpact(frame) : .impact(frame))
             entries.append((item, nil, 5))
         }
         let clock = world.clock
@@ -70,7 +73,7 @@ enum SceneBuilder {
             item.barLift = 42
             item.shadow = 14
             if egg.mutated && Int(time * 2) % 2 == 0 {
-                item.icon = Int32(atlas.tile(.icon(.sparkle)))
+                item.icon = Int32(atlas.iconTile(.sparkle, time: time))
             }
             let hit = HitBox(target: .egg(egg.id), minX: x - 14, minY: groundY, maxX: x + 14, maxY: groundY + 38)
             entries.append((item, hit, 3))
@@ -86,7 +89,7 @@ enum SceneBuilder {
                 drop = t < 0.6 ? 160 * (1 - t / 0.6) * (1 - t / 0.6) : 14 * abs(sin((t - 0.6) / 0.5 * .pi)) * (1.1 - t) / 0.5
             }
             item.position = SIMD2(x, groundY + drop)
-            if loot.age < 2.5 && Int(time * 10) % 2 == 0 { item.icon = Int32(atlas.tile(.icon(.sparkle))) }
+            if loot.age < 2.5 && Int(time * 10) % 2 == 0 { item.icon = Int32(atlas.iconTile(.sparkle, time: time)) }
             switch loot.kind {
             case .dailyChest:
                 item.tile = atlas.tile(.chest)
@@ -105,7 +108,7 @@ enum SceneBuilder {
             item.shadow = 18
             item.barLift = 36
             if (time + Double(loot.x)).truncatingRemainder(dividingBy: 3) < 1 {
-                item.icon = Int32(atlas.tile(.icon(.sparkle)))
+                item.icon = Int32(atlas.iconTile(.sparkle, time: time))
             }
             let hit = HitBox(target: .loot(loot.id), minX: x - 20, minY: groundY, maxX: x + 20, maxY: groundY + 34)
             entries.append((item, hit, 2))
@@ -149,6 +152,7 @@ enum SceneBuilder {
             var flags: SceneItem.Flags = []
             if m.facingLeft { flags.insert(.flipX) }
             if m.hurtFlash > 0 { flags.insert(.hurtFlash) }
+            if m.hurtFlash > 0.13 { flags.insert(.whiteFlash) }
             if m.phase == .attacking {
                 flags.insert(.monsterBar)
                 item.bars = SIMD4(Float(max(0, m.health / m.kind.maxHealth)), 0, 0, 0)
@@ -218,6 +222,7 @@ enum SceneBuilder {
         var flags: SceneItem.Flags = []
         if pet.facingLeft && pet.facing == .side { flags.insert(.flipX) }
         if pet.hurtFlash > 0 { flags.insert(.hurtFlash) }
+        if pet.hurtFlash > 0.23 { flags.insert(.whiteFlash) }
         if pet.health < 25 { flags.insert(.blinkHealth) }
         item.flags = flags.rawValue
 
@@ -225,7 +230,7 @@ enum SceneBuilder {
             item.bars = SIMD4(Float(pet.health / 100), Float(pet.hunger / 100), Float(pet.happiness / 100), 0)
         }
         if let icon = icon(for: pet, clock: clock) {
-            item.icon = Int32(atlas.tile(.icon(icon)))
+            item.icon = Int32(atlas.iconTile(icon, time: time))
         }
 
         var weaponItem: SceneItem?
