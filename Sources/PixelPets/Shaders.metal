@@ -193,7 +193,11 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
     DayBlend d = dayBlend(u.dayPhase);
     float3 tint = mix(kTint[d.a], kTint[d.b], d.t);
     float night = mix(kNight[d.a], kNight[d.b], d.t);
-    float groundTop = floor(u.grid.y * 0.25 / k);
+    // Depth layers, back to front: sky, clouds, far ridge, treeline hill, near hill, the back
+    // meadow with the oak (from the horizon down to the walking line), the front meadow, and
+    // a foreground drawn after the sprites (see `foreground`).
+    float walk = floor(u.grid.y * 0.22 / k);
+    float groundTop = floor(u.grid.y * 0.34 / k); // the horizon
     float skyH = max(1.0, u.grid.y / k - groundTop);
     float width = u.grid.x / k;
     float3 top = mix(kSkyTop[d.a], kSkyTop[d.b], d.t);
@@ -275,7 +279,7 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         if (g.y < nearH) col = nearGreen * tint;
 
         // A big shaded oak on the right.
-        float2 treeAt = float2(floor(width * 0.82), groundTop);
+        float2 treeAt = float2(floor(width * 0.82), groundTop - 7.0);
         float2 tp = g - treeAt;
         if (abs(tp.x + tp.y * 0.05) < 4.0 + max(0.0, 6.0 - tp.y) * 0.6 && tp.y >= 0.0 && tp.y < 46.0) {
             col = (tp.x < 0.0 ? float3(0.47, 0.33, 0.25) : float3(0.36, 0.25, 0.20)) * tint;
@@ -325,21 +329,24 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         if (dot(dm, dm) <= 42.0 && dot(ds, ds) > 30.0) col = float3(0.98, 0.95, 0.80);
     }
 
-    // The meadow the pets walk on.
+    // The meadow: hazy toward the horizon, richer below the walking line.
     float3 grass = float3(0.45, 0.72, 0.36);
     if (g.y < groundTop) {
-        float depth = groundTop - 1.0 - g.y;
-        // Long horizontal strokes of lighter and darker grass.
-        float patch = noise2(float2(g.x * 0.018 + floor(g.y / 3.0) * 7.3, g.y * 0.22));
+        float fromHorizon = groundTop - 1.0 - g.y;
+        float nearness = clamp(fromHorizon / groundTop, 0.0, 1.0);
+        // Grass strokes get longer and thicker toward the viewer.
+        float rowH = 1.0 + floor(nearness * 3.0);
+        float patch = noise2(float2(g.x * (0.03 - nearness * 0.015) + floor(g.y / rowH) * 7.3, g.y * 0.22));
         float3 c = patch > 0.7 ? float3(0.58, 0.78, 0.38) : patch < 0.22 ? float3(0.39, 0.64, 0.35) : grass;
         if (patch > 0.66 && patch <= 0.7 && checker(pixel)) c = float3(0.58, 0.78, 0.38);
-        if (depth < 1.0) c = float3(0.56, 0.80, 0.40);
-        if (hash21(pixel) > 0.93) c *= 0.88;
-        c = mix(c, float3(0.27, 0.50, 0.30), smoothstep(groundTop * 0.4, groundTop, depth) * 0.6);
+        if (hash21(pixel) > 0.94) c *= 0.9;
+        if (g.y < walk) c = mix(c, float3(0.30, 0.55, 0.30), 0.25 + 0.35 * smoothstep(walk, 0.0, g.y));
+        c = mix(c, bottom, (1.0 - nearness) * 0.25);
+        if (fromHorizon < 1.0) c = mix(float3(0.56, 0.80, 0.40), bottom, 0.2);
         col = c * tint;
     }
     float tuft = hash11(g.x * 1.7 + 3.0);
-    if ((g.y == groundTop && tuft > 0.7) || (g.y == groundTop + 1.0 && tuft > 0.9)) col = float3(0.56, 0.80, 0.40) * tint;
+    if ((g.y == groundTop && tuft > 0.7) || (g.y == groundTop + 1.0 && tuft > 0.9)) col = mix(float3(0.56, 0.80, 0.40), bottom, 0.2) * tint;
 
     // Flowers swaying on a 2-frame cycle.
     float cellW = 17.0;
@@ -347,7 +354,8 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         float c = floor(g.x / cellW) + float(k);
         if (hash11(c * 3.7 + 1.0) < 0.4) continue;
         float fx = c * cellW + floor(hash11(c * 9.1) * (cellW - 4.0)) + 2.0;
-        float fy = groundTop - 3.0 - floor(hash11(c * 4.3) * max(1.0, groundTop - 8.0));
+        float fy = groundTop - 4.0 - floor(hash11(c * 4.3) * max(1.0, groundTop - 14.0));
+        if (abs(fy - walk) < 4.0) continue; // keep the walking line clear
         float sway = pmod(floor(u.time) + c, 2.0);
         float2 p = g - float2(fx, fy);
         if (p.x == 0.0 && (p.y == 0.0 || p.y == 1.0)) col = float3(0.27, 0.52, 0.25) * tint;
@@ -368,6 +376,44 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             if (pmod(s, 37.0 + floor(hl * 40.0)) < 4.0) col = mix(col, float3(0.78, 0.84, 0.95), 0.6);
         }
     }
+    return col;
+}
+
+// MARK: - Foreground (drawn over the sprites)
+
+static float3 foreground(float2 pixel, constant SceneUniforms& u, float3 col) {
+    float k = u.grid.x / 480.0;
+    float2 g = floor(pixel / k);
+    DayBlend d = dayBlend(u.dayPhase);
+    float3 tint = mix(kTint[d.a], kTint[d.b], d.t);
+    float walkY = floor(u.grid.y * 0.22 / k) * k;
+
+    // Grass blades along the walking line, in front of the pets' feet, swaying a little.
+    float cell = floor(pixel.x / 3.0);
+    if (hash11(cell * 1.37) > 0.68) {
+        float bx = cell * 3.0 + floor(hash11(cell * 2.1) * 3.0);
+        float base = walkY - 3.0 - floor(hash11(cell * 5.3) * 7.0);
+        float height = 4.0 + floor(hash11(cell * 7.1) * 7.0);
+        float t = (pixel.y - base) / height;
+        if (t >= 0.0 && t < 1.0) {
+            float lean = (hash11(cell * 3.3) - 0.5) * 4.0 + sin(u.time * 1.3 + cell * 0.37) * 0.8;
+            if (abs(pixel.x - bx - lean * t * t) < 0.6) {
+                float3 c = t > 0.65 ? float3(0.62, 0.84, 0.42) : t > 0.3 ? float3(0.45, 0.72, 0.36) : float3(0.32, 0.56, 0.30);
+                col = c * tint;
+            }
+        }
+    }
+
+    // Big dark grass along the bottom edge, the nearest layer.
+    float edge = 9.0 + 7.0 * noise1(g.x * 0.06) + 5.0 * noise1(g.x * 0.19 + 3.0);
+    float spike = floor(g.x / 2.0);
+    edge += hash11(spike * 1.9) > 0.6 ? floor(hash11(spike * 4.1) * 4.0) : 0.0;
+    if (g.y < edge) {
+        float3 c = g.y > edge - 2.0 ? float3(0.36, 0.60, 0.32) : float3(0.20, 0.40, 0.25);
+        if (g.y <= edge - 2.0 && g.y > edge - 4.0 && checker(pixel)) c = float3(0.28, 0.50, 0.29);
+        col = c * tint;
+    }
+    if (u.playMode > 0.5) col *= 0.85;
     return col;
 }
 
@@ -471,7 +517,7 @@ fragment float4 petsFragment(VOut in [[stage_in]],
     float2 frag = float2(in.position.x, u.resolution.y - in.position.y);
     float2 g = floor(frag / cell);
     float k = u.grid.x / 480.0;
-    float groundTop = floor(u.grid.y * 0.25 / k) * k;
+    float groundTop = floor(u.grid.y * 0.22 / k) * k; // the walking line
 
     float3 col = landscape(g, u, image);
     if (u.playMode > 0.5) col *= 0.85;
@@ -480,5 +526,6 @@ fragment float4 petsFragment(VOut in [[stage_in]],
     for (uint i = 0; i < count; i++) {
         col = drawItem(items[i], g, groundTop, u, atlas, col);
     }
+    if ((u.background.x & kBackgroundImage) == 0u) col = foreground(g, u, col);
     return float4(saturate(col), 1.0);
 }

@@ -161,10 +161,10 @@ final class PetsView: MTKView {
         updateDrawableSize()
     }
 
-    /// Matches the shader: the ground line sits on the landscape's 2-pixel grid.
+    /// Matches the shader's walking line (22% up), on the landscape's 2-pixel grid.
     var groundY: Float {
         let k = Float(Self.gridWidth) / 480
-        return floor(Float(drawableSize.height) * 0.25 / k) * k
+        return floor(Float(drawableSize.height) * 0.22 / k) * k
     }
 
     // MARK: Drawing
