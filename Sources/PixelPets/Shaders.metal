@@ -166,6 +166,11 @@ static DayBlend dayBlend(float phase) {
 // fade toward the sky with distance. Shapes are designed in 480-wide units and sampled at the
 // grid's full resolution.
 
+/// Wind gust strength (0...1) at design x: bands that roll right to left across the scene.
+static float gust(float x, float t) {
+    return smoothstep(0.55, 0.95, noise1(x * 0.011 + t * 0.32));
+}
+
 /// Picks one of five tones from `l` (about -1...1), dithering a narrow seam between each pair.
 static float3 ramp5(float l, float2 pixel, float3 t0, float3 t1, float3 t2, float3 t3, float3 t4) {
     float d = checker(pixel) ? 0.06 : -0.06;
@@ -287,6 +292,26 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             }
         }
 
+        // Small flocks of birds crossing by day.
+        if (night < 0.5) {
+            for (int f = 0; f < 2; f++) {
+                float ff = float(f);
+                float fspan = width + 160.0;
+                float fx = fspan - pmod(u.time * (9.0 + ff * 4.0) + ff * 271.0, fspan) - 80.0;
+                float fy = groundTop + skyH * (0.55 + ff * 0.18) + sin(u.time * 0.4 + ff) * 4.0;
+                for (int bI = 0; bI < 4; bI++) {
+                    float fb = float(bI);
+                    float2 bp = float2(fx + fb * 6.0 + hash11(fb + ff * 9.0) * 3.0, fy - abs(fb - 1.5) * 2.5 + hash11(fb * 3.0 + ff) * 2.0);
+                    float2 q = p - bp;
+                    float flap = sin(u.time * 9.0 + fb * 1.7) > 0.0 ? 1.0 : -0.4;
+                    if (abs(q.x) < 2.0 && abs(q.y - abs(q.x) * 0.55 * flap) < 0.45) {
+                        col = mix(float3(0.22, 0.26, 0.36), col, 0.25);
+                        clouded = true;
+                    }
+                }
+            }
+        }
+
         // Distant mountains: planar faces, snow above a ragged line, forest on the lower slopes.
         float ridge = ridgeHeight(p.x, groundTop, skyH);
         if (p.y < ridge) {
@@ -350,9 +375,12 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
             clouded = true;
         }
         float best = -9.0, bestZ = -1e9;
+        float treeGust = gust(treeAt.x, u.time);
         for (int i = 0; i < 16; i++) {
             float fi = float(i);
             float2 c = float2((hash11(fi * 1.9) - 0.5) * 84.0, 44.0 + hash11(fi * 2.7) * 44.0);
+            // Clusters sway, higher ones more, and lean with each gust.
+            c.x += (sin(u.time * 0.9 + fi * 1.3) * 0.7 - treeGust * 2.0) * (c.y / 80.0);
             float r = 12.0 + hash11(fi * 3.9) * 10.0;
             float2 dd = (tp - c) / r;
             float edge = 1.0 + (noise2(p * 0.55 + fi) - 0.5) * 0.28;
@@ -369,6 +397,20 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
                              float3(0.42, 0.70, 0.33), float3(0.64, 0.82, 0.35));
             col = c * tint;
             clouded = true;
+        }
+
+        // A few leaves drift down from the oak and blow away with the wind.
+        for (int i = 0; i < 6; i++) {
+            float fi = float(i);
+            float period = 9.0 + hash11(fi * 4.1) * 6.0;
+            float age = pmod(u.time + hash11(fi * 2.2) * period, period) / period;
+            float2 start = treeAt + float2((hash11(fi * 6.3) - 0.5) * 60.0, 50.0 + hash11(fi * 8.1) * 25.0);
+            float2 leaf = start + float2(-age * 70.0 + sin(age * 18.0 + fi) * 4.0, -age * (start.y - treeAt.y + 6.0));
+            float2 q = p - leaf;
+            float spin = sin(age * 25.0 + fi);
+            if (abs(q.x) < 1.2 * abs(spin) + 0.4 && abs(q.y) < 0.7) {
+                col = (hash11(fi) > 0.5 ? float3(0.62, 0.80, 0.30) : float3(0.88, 0.72, 0.30)) * tint;
+            }
         }
     }
 
@@ -415,20 +457,66 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         if (n + blades > 0.62 && n + blades <= 0.66 && checker(pixel)) c = light;
         // Darker strokes toward the viewer.
         if (nearness > 0.5 && noise2(float2(p.x * 0.3, p.y * 1.4)) > 0.82) c = dark;
+        // Wind: gusts bend the grass, flashing its lighter side in short vertical strokes.
+        float g2 = gust(p.x + p.y * 0.4, u.time);
+        if (g2 > 0.05 && hash21(floor(float2(pixel.x / k, pixel.y / (k * 2.0)))) < g2 * 0.55) c = mix(c, bright, 0.55);
         if (p.y < walk) c = mix(c, float3(0.26, 0.50, 0.28), 0.2 + 0.35 * smoothstep(walk, 0.0, p.y));
         c = mix(c, bottom, (1.0 - nearness) * 0.3);
         if (fromHorizon < 1.0) c = mix(float3(0.58, 0.80, 0.42), bottom, 0.2);
         col = c * tint;
 
-        // Tiny flowers, denser toward the front.
-        float2 cell = floor(p / float2(5.0, 3.0));
-        float fh = hash21(cell + 31.0);
-        if (fh > 0.975 - nearness * 0.03 && abs(p.y - walk) > 3.0) {
-            float2 f = cell * float2(5.0, 3.0) + float2(2.5, 1.5);
-            if (length(p - f) < 0.6 + nearness * 0.5) {
-                float kind = hash21(cell + 7.0);
-                col = (kind < 0.4 ? float3(1.0, 0.98, 0.92) : kind < 0.75 ? float3(0.99, 0.84, 0.32) : float3(0.98, 0.60, 0.70)) * tint;
+        // Grass tufts and flowers that sway in the breeze and lean into each gust.
+        float2 cell = floor(p / float2(7.0, 4.0));
+        for (int dx = -1; dx <= 1; dx++) {
+            float2 cc = cell + float2(float(dx), 0.0);
+            float h = hash21(cc + 31.0);
+            if (h < 0.55) continue;
+            float2 root = cc * float2(7.0, 4.0) + float2(1.0 + hash21(cc + 3.0) * 5.0, 0.5);
+            if (abs(root.y - walk) < 3.0 || root.y > groundTop - 2.0) continue;
+            float scale = 0.6 + nearness * 0.9;
+            float stemH = (2.5 + hash21(cc + 9.0) * 2.5) * scale;
+            float up = p.y - root.y;
+            if (up < 0.0 || up > stemH + 1.5 * scale) continue;
+            float bend = (sin(u.time * 1.8 + cc.x * 0.7) * 0.35 - gust(root.x, u.time) * 1.6) * scale;
+            float f = up / stemH;
+            float sx = root.x + bend * f * f;
+            bool flower = h > 0.88;
+            if (up <= stemH && abs(p.x - sx) < 0.28 * max(1.0, scale)) {
+                col = (flower ? float3(0.30, 0.56, 0.28) : float3(0.56, 0.80, 0.40)) * tint;
             }
+            if (flower) {
+                float2 head = float2(root.x + bend, root.y + stemH);
+                float2 q = p - head;
+                float r = 1.1 * scale;
+                float kind = hash21(cc + 7.0);
+                float3 petal = kind < 0.4 ? float3(1.0, 0.98, 0.92) : kind < 0.75 ? float3(0.99, 0.84, 0.32) : float3(0.98, 0.60, 0.70);
+                if (length(q) < r) col = (length(q) < r * 0.4 ? float3(0.97, 0.72, 0.25) : petal) * tint;
+            }
+        }
+
+        // Cloud shadows sliding across the meadow.
+        if (noise2(float2(p.x * 0.006 + u.time * 0.012, p.y * 0.02)) > 0.66) col *= 0.88;
+    }
+
+    // Cloud shadows on the hills too.
+    if (p.y >= groundTop && p.y < groundTop + 40.0 && clouded && (u.background.x & kBackgroundImage) == 0u &&
+        noise2(float2(p.x * 0.006 + u.time * 0.012, p.y * 0.02)) > 0.66) col *= 0.9;
+
+    // Floating motes: pollen by day, fireflies by night.
+    int motes = night > 0.5 ? 18 : 10;
+    for (int i = 0; i < motes; i++) {
+        float fi = float(i);
+        float2 m = float2(pmod(hash11(fi * 3.7) * width - u.time * (2.0 + hash11(fi) * 3.0), width),
+                          walk + 4.0 + hash11(fi * 5.9) * 40.0 + sin(u.time * 0.7 + fi * 2.3) * 5.0);
+        m.x += sin(u.time * 0.9 + fi) * 6.0;
+        float2 q = p - m;
+        if (night > 0.5) {
+            float blink = smoothstep(0.2, 1.0, sin(u.time * (0.8 + hash11(fi * 2.0)) + fi * 4.0));
+            float r2 = dot(q, q);
+            if (r2 < 1.6) col = mix(col, float3(0.92, 1.0, 0.55), blink);
+            else if (r2 < 9.0) col = mix(col, float3(0.60, 0.88, 0.35), blink * 0.3 * (1.0 - r2 / 9.0));
+        } else if (dot(q, q) < 0.35) {
+            col = mix(col, float3(1.0, 0.98, 0.85), 0.7);
         }
     }
 
@@ -462,7 +550,8 @@ static float3 foreground(float2 pixel, constant SceneUniforms& u, float3 col) {
         float height = 4.0 + floor(hash11(cell * 7.1) * 7.0);
         float t = (pixel.y - base) / height;
         if (t >= 0.0 && t < 1.0) {
-            float lean = (hash11(cell * 3.3) - 0.5) * 4.0 + sin(u.time * 1.3 + cell * 0.37) * 0.8;
+            float lean = (hash11(cell * 3.3) - 0.5) * 4.0 + sin(u.time * 1.3 + cell * 0.37) * 0.8
+                       - gust(g.x, u.time) * 6.0;
             if (abs(pixel.x - bx - lean * t * t) < 0.6) {
                 float3 c = t > 0.65 ? float3(0.62, 0.84, 0.42) : t > 0.3 ? float3(0.45, 0.72, 0.36) : float3(0.32, 0.56, 0.30);
                 col = c * tint;

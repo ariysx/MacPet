@@ -13,7 +13,7 @@ Your first egg is in the middle of the ground. It hatches in about 20 minutes.
 
 ## Playing
 
-The pets live under your desktop icons. To interact with them, press **⌥⌘P** to turn on play mode (or choose **Play Mode** in the menu). The landscape dims and every pet's bars show. Play mode turns itself off after 2 minutes without mouse input, or when you press Esc.
+The pets live under your desktop icons. To interact with them, press **⌥⌘P** to turn on play mode (or choose **Play Mode** in the menu). The landscape dims and every pet's bars show. The Dock hides while you play. Play mode turns itself off after 2 minutes without mouse input, or when you press Esc.
 
 | Action | How |
 |---|---|
@@ -56,7 +56,7 @@ A happy adult lays an egg. The chick inherits its parent's genes with a few muta
 
 ## Backgrounds
 
-The landscape is drawn by the shader: clouds, distant mountains, a treeline, a big oak and a meadow, lit for the time of day, with stars, a moon and sometimes an aurora at night.
+The landscape is drawn by the shader: clouds, distant mountains, pine-covered hills, a big oak and a meadow, lit for the time of day. Wind gusts roll through the grass and flowers, leaves fall from the oak, cloud shadows drift past, birds cross by day, and fireflies, stars, a moon and sometimes an aurora come out at night.
 
 To use your own picture instead, choose **Background → Open Backgrounds Folder…**, drop PNG or JPG images into `~/Library/Application Support/PixelPets/Backgrounds/`, then pick one from the **Background** menu. It is cropped to fill the screen and tinted for dawn, dusk and night. Pets walk on a line a quarter of the way up the screen.
 

@@ -339,6 +339,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (id, window) in windows {
             window.setPlayMode(on && id == mainID)
         }
+        // Tuck the Dock away while playing so the pets get the whole screen.
+        NSApp.presentationOptions = on ? [.autoHideDock] : []
     }
 
     private func registerHotKey() {
