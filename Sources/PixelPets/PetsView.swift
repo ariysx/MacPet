@@ -18,6 +18,8 @@ final class PetsRenderer {
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
     private let atlasTexture: MTLTexture
+    /// Bound when there is no background image, so texture(1) is always valid.
+    private let blank: MTLTexture
     var atlas: SpriteAtlas
 
     init?() {
@@ -51,6 +53,10 @@ final class PetsRenderer {
             return nil
         }
         atlasTexture = texture
+        let bd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm, width: 1, height: 1, mipmapped: false)
+        bd.usage = .shaderRead
+        guard let blank = device.makeTexture(descriptor: bd) else { return nil }
+        self.blank = blank
         self.device = device
         self.queue = queue
         uploadAtlas()
@@ -65,7 +71,7 @@ final class PetsRenderer {
         }
     }
 
-    func draw(in view: MTKView, uniforms: SceneUniforms, items: [SceneItem]) {
+    func draw(in view: MTKView, uniforms: SceneUniforms, items: [SceneItem], background: MTLTexture?) {
         guard let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let commands = queue.makeCommandBuffer(),
@@ -82,6 +88,7 @@ final class PetsRenderer {
             encoder.setFragmentBytes(bytes.baseAddress!, length: bytes.count, index: 1)
         }
         encoder.setFragmentTexture(atlasTexture, index: 0)
+        encoder.setFragmentTexture(background ?? blank, index: 1)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
         commands.present(drawable)
@@ -95,7 +102,7 @@ final class PetsRenderer {
 /// it up with nearest-neighbour filtering, so every pixel is a crisp block.
 @MainActor
 final class PetsView: MTKView {
-    static let gridWidth: CGFloat = 320
+    static let gridWidth = CGFloat(SceneBuilder.gridWidth)
 
     private unowned let app: AppDelegate
     private let renderer: PetsRenderer
@@ -154,7 +161,11 @@ final class PetsView: MTKView {
         updateDrawableSize()
     }
 
-    var groundY: Float { floor(Float(drawableSize.height) * 0.25) }
+    /// Matches the shader: the ground line sits on the landscape's 2-pixel grid.
+    var groundY: Float {
+        let k = Float(Self.gridWidth) / 480
+        return floor(Float(drawableSize.height) * 0.25 / k) * k
+    }
 
     // MARK: Drawing
 
@@ -173,8 +184,9 @@ final class PetsView: MTKView {
                                      dayPhase: app.dayPhase,
                                      rain: Float(app.world.rain),
                                      playMode: app.playMode ? 1 : 0,
-                                     itemCount: UInt32(items.count))
-        renderer.draw(in: self, uniforms: uniforms, items: items)
+                                     itemCount: UInt32(items.count),
+                                     background: app.backgroundInfo)
+        renderer.draw(in: self, uniforms: uniforms, items: items, background: app.backgroundTexture)
     }
 
     // MARK: Input (play mode, main display only)
@@ -195,9 +207,12 @@ final class PetsView: MTKView {
                      Float(p.y / max(bounds.height, 1)) * Float(drawableSize.height))
     }
 
-    /// Height above the ground for a pet hanging from the pointer.
+    /// Grid pixels to simulation units.
+    private func worldX(_ p: SIMD2<Float>) -> Double { Double(p.x / SceneBuilder.worldScale) }
+
+    /// Height above the ground, in simulation units, for a pet hanging from the pointer.
     private func heldHeight(_ p: SIMD2<Float>) -> Double {
-        Double(max(0, p.y - groundY - 10))
+        Double(max(0, p.y - groundY - 30) / SceneBuilder.worldScale)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -222,7 +237,7 @@ final class PetsView: MTKView {
         app.noteInput()
         let p = gridPoint(event)
         if feedKeyDown || event.modifierFlags.contains(.option) {
-            app.world.dropPellet(x: Double(p.x))
+            app.world.dropPellet(x: worldX(p))
             return
         }
         guard let hit = lastFrame.hits.first(where: { $0.contains(p) }) else { return }
@@ -243,20 +258,20 @@ final class PetsView: MTKView {
         app.noteInput()
         let p = gridPoint(event)
         if pr.pickedUp {
-            app.world.moveHeld(id: id, x: Double(p.x), height: heldHeight(p))
+            app.world.moveHeld(id: id, x: worldX(p), height: heldHeight(p))
             press = pr
             return
         }
         // Wiggling side to side over the pet is a rub; leaving it or lifting up picks it up.
-        let movedUp = p.y - pr.start.y > 3
+        let movedUp = p.y - pr.start.y > 6
         let distance = simd_length(p - pr.start)
-        if (movedUp || !pr.box.contains(p, margin: 2)) && distance > 3 {
+        if (movedUp || !pr.box.contains(p, margin: 4)) && distance > 6 {
             pr.pickedUp = true
             app.world.pickUp(id: id)
-            app.world.moveHeld(id: id, x: Double(p.x), height: heldHeight(p))
+            app.world.moveHeld(id: id, x: worldX(p), height: heldHeight(p))
         } else {
             let dx = p.x - pr.lastX
-            if abs(dx) >= 1 {
+            if abs(dx) >= 2 {
                 let direction = dx > 0 ? 1 : -1
                 let now = CACurrentMediaTime()
                 if pr.lastDirection != 0 && direction != pr.lastDirection { pr.turns.append(now) }
@@ -278,7 +293,7 @@ final class PetsView: MTKView {
         guard isMain, app.playMode, let pr = press, case .pet(let id) = pr.target else { return }
         let p = gridPoint(event)
         if pr.pickedUp {
-            app.world.drop(id: id, x: Double(p.x), height: heldHeight(p))
+            app.world.drop(id: id, x: worldX(p), height: heldHeight(p))
         } else if !pr.rubbed {
             app.world.petPet(id: id)
         }

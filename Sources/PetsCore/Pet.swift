@@ -46,6 +46,12 @@ enum SleepKind: String, Codable {
     case night
 }
 
+/// Which way a pet faces. Pets only move left and right; front and back are for standing
+/// still: looking at you, or looking off into the landscape.
+enum PetFacing: String, Codable, CaseIterable {
+    case side, front, back
+}
+
 enum CareReason: String, Codable {
     case starving, sick
 }
@@ -77,6 +83,9 @@ struct Pet: Codable, Identifiable {
     /// Grid pixels from the left edge.
     var x: Double
     var facingLeft = false
+    var facing: PetFacing = .side
+    /// The facing it takes up when it stops walking, rolled with each new wander target.
+    var idleFacing: PetFacing = .front
     var sleep: SleepKind = .awake
     var sickRemaining: Double = 0
     /// World clock times of overfed meals in the last 2 h.

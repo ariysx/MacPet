@@ -32,6 +32,8 @@ Time only passes while the app is running and the screen is awake. A pet needs f
 
 ## Pets and genes
 
+Pets are drawn procedurally at 64 x 64: each species is a rig of shaded parts (body, head, legs, ears, tail, wings) lit from the top left in four tones with coloured outlines, posed frame by frame (idle 4, walk 8, hop 6, attack 6, eat 4, sleep 4, sick 4, held 4, hurt 2). Pets live on one line: they walk left and right, and when they stop they may turn to face you or look away into the landscape. Each pet has side, front and back views.
+
 Every pet hatches with a genome:
 
 - **Body:** blob, bird, cat, bunny, frog, bear, ghost, fox, dragon
@@ -44,6 +46,12 @@ Every pet hatches with a genome:
 Each variant has a rarity: ★ Common, ★★ Uncommon, ★★★ Rare, ★★★★ Epic, ★★★★★ Legendary. A pet's rarity is its rarest feature. Sprites are composed from the genes when the pet hatches, so every combination looks different.
 
 A happy adult lays an egg. The chick inherits its parent's genes with a few mutations: colours drift a little every generation, and now and then the body, pattern, accessory, eyes or a trait changes. The menu shows each pet's generation, parent and mutations.
+
+## Backgrounds
+
+The landscape is drawn by the shader: clouds, distant mountains, a treeline, a big oak and a meadow, lit for the time of day, with stars, a moon and sometimes an aurora at night.
+
+To use your own picture instead, choose **Background → Open Backgrounds Folder…**, drop PNG or JPG images into `~/Library/Application Support/PixelPets/Backgrounds/`, then pick one from the **Background** menu. It is cropped to fill the screen and tinted for dawn, dusk and night. Pets walk on a line a quarter of the way up the screen.
 
 ## Items
 

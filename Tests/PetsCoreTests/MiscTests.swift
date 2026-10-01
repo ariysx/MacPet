@@ -194,6 +194,7 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.primary), 16)
         XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.icon), 64)
         XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.itemCount), 32)
-        XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.pad), 48)
+        XCTAssertEqual(MemoryLayout<SceneUniforms>.offset(of: \.background), 48)
+        XCTAssertEqual(MemoryLayout<SceneItem>.offset(of: \.shadow), 76)
     }
 }

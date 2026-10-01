@@ -27,11 +27,23 @@ Status: built. The original spec (approved 2026-09-30) is below, with the change
 - **Daily chest:** one per local calendar day the app runs, with three rolls, at least one uncommon or better. Opened by clicking it in play mode or from the menu.
 - A dead pet's equipment returns to the bag. The bag, loot on the ground and the last chest day are saved.
 
+### Art: procedural rigs at 64 x 64
+
+- ASCII sprites were replaced by a small procedural renderer (`PixelRig.swift`). A sprite is a list of shaded parts (ellipses, tapered capsules, polygons, rings). Each pixel is lit from the top left and quantized into four tones per colour ramp (light, base, cool shade, dark tinted outline). Outlines go on the silhouette and wherever a front part overlaps a part behind it, and front parts cast a one-pixel shade onto parts behind them. Furry species get short stroke texture.
+- The atlas stores (ramp, tone) per pixel; the shader turns it into colour, with the body and secondary ramps taken from each pet's genes.
+- `Species.swift` has a side rig per species, a generic front and back rig driven by a per-species profile, accessories, and hi-res eyes and mouths. Face details are masked to the part under them, so in profile only the near eye shows and nothing pokes through ears or paws.
+- Pets are designed on a 32-unit canvas and rendered at 2x into 64 x 64 frames. Per pet: side (idle 4, walk 8, sleep 4, eat 4, hop 6, sick 4, held 4, hurt 2, attack 6), front (idle, eat, hop, held, sick, sleep) and back (idle), each for adult and baby: 144 frames.
+- Monsters (`Props.swift`) use the same renderer: slime 6 + 4 attack, bat 6 + 4, ogre 8 + 6 at 128 x 128. Eggs, the gravestone, food, chest, loot bag, weapons and smoke too.
+- The screen grid is 960 wide (it was 320). The simulation still uses 320-wide units, and the scene scales them by 3. Bars and icons are drawn at 2x.
+- **Facing:** pets only ever move along x. `Pet.facing` is side while walking, sleeping or fighting; front when held, eating, excited or hungry; otherwise front, back or side, rolled each time it picks a new spot.
+- **Ground shadows** under pets, monsters, eggs and loot.
+- **Landscape** restyled: three-tone cumulus clouds, dithered sky bands, a distant ridge with snow and diagonal light, a pine treeline, bushes, a big oak, and a meadow with horizontal grass strokes. About one night in three has an aurora.
+- **Background images:** pictures in `~/Library/Application Support/PixelPets/Backgrounds/` can replace the drawn landscape (Background menu), cropped to fill and tinted for the time of day.
+
 ### Other changes
 
 - **Scene item limit is 24, not 12**, to fit weapons, loot and the chest.
-- **The drawable is the grid itself** (320 x height) and the layer scales it up with nearest-neighbour filtering. The shader still snaps to cells, but the cell size is 1, so pixels are uniform and the fragment cost is tiny.
-- **Ogre tiles** are 32 x 32 blocks holding 24 x 24 art.
+- **The drawable is the grid itself** (960 x height) and the layer scales it up with nearest-neighbour filtering.
 - **Hatch time** is 20 min minus 1 min per pet hatched so far (floor 5), so the floor can be reached.
 - **Picky pets** eat when hunger is 50 or less, and only fetch food within 120 px unless they are below 30.
 - **Night sleep** lasts until 07:00. Full energy only ends naps.

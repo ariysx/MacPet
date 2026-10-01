@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private enum Key {
         static let fps = "fps"
         static let notifications = "notifications"
+        static let background = "background"
     }
 
     // MARK: State
@@ -41,6 +42,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var renderer: PetsRenderer?
     private(set) var regions = PetSpriteRegions()
     private(set) var dayPhase: Float = 0.5
+    private(set) var backgroundTexture: MTLTexture?
+    private var auroraTonight = false
+
+    /// For SceneUniforms.background: x flags (1 image, 2 aurora), y and z the image size.
+    var backgroundInfo: SIMD3<UInt32> {
+        var flags: UInt32 = auroraTonight ? 2 : 0
+        guard let image = backgroundTexture else { return SIMD3(flags, 0, 0) }
+        flags |= 1
+        return SIMD3(flags, UInt32(image.width), UInt32(image.height))
+    }
+
+    static var backgroundsFolder: URL {
+        SaveStore.defaultURL.deletingLastPathComponent().appendingPathComponent("Backgrounds", isDirectory: true)
+    }
 
     private var windows: [CGDirectDisplayID: WallpaperWindow] = [:]
     private var statusItem: NSStatusItem!
@@ -76,6 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         self.renderer = renderer
+        try? FileManager.default.createDirectory(at: Self.backgroundsFolder, withIntermediateDirectories: true)
+        loadBackground()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let menu = NSMenu()
@@ -146,6 +163,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let c = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
         let seconds = (c.hour ?? 12) * 3600 + (c.minute ?? 0) * 60 + (c.second ?? 0)
         dayPhase = Float(seconds) / 86_400
+        // About one night in three has an aurora. Nights are counted from noon to noon.
+        let night = Int((Date().timeIntervalSince1970 + Double(TimeZone.current.secondsFromGMT()) - 43_200) / 86_400)
+        auroraTonight = (UInt64(truncatingIfNeeded: night) &* 2_654_435_761) % 3 == 0
+    }
+
+    // MARK: Background images
+
+    private func backgroundFiles() -> [URL] {
+        let types: Set<String> = ["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "heic", "webp"]
+        let files = (try? FileManager.default.contentsOfDirectory(at: Self.backgroundsFolder, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { types.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    }
+
+    /// Loads the chosen picture, or clears it to use the drawn landscape.
+    private func loadBackground() {
+        backgroundTexture = nil
+        guard let renderer, let name = defaults.string(forKey: Key.background) else { return }
+        let url = Self.backgroundsFolder.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            backgroundTexture = try MTKTextureLoader(device: renderer.device).newTexture(URL: url, options: [.SRGB: false])
+        } catch {
+            petsLog("could not load background \(name): \(error)")
+        }
+    }
+
+    private func backgroundMenu() -> NSMenuItem {
+        let item = NSMenuItem(title: "Background", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        let current = defaults.string(forKey: Key.background)
+        let drawn = action("Meadow (drawn)") { [unowned self] in
+            defaults.removeObject(forKey: Key.background)
+            loadBackground()
+        }
+        drawn.state = backgroundTexture == nil ? .on : .off
+        sub.addItem(drawn)
+        let files = backgroundFiles()
+        if !files.isEmpty { sub.addItem(.separator()) }
+        for file in files {
+            let name = file.lastPathComponent
+            let row = action(file.deletingPathExtension().lastPathComponent) { [unowned self] in
+                defaults.set(name, forKey: Key.background)
+                loadBackground()
+            }
+            row.state = name == current && backgroundTexture != nil ? .on : .off
+            sub.addItem(row)
+        }
+        sub.addItem(.separator())
+        sub.addItem(action("Open Backgrounds Folder…") {
+            try? FileManager.default.createDirectory(at: Self.backgroundsFolder, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(Self.backgroundsFolder)
+        })
+        sub.addItem(info("Add PNG or JPG pictures to that folder."))
+        item.submenu = sub
+        return item
     }
 
     @objc private func autosave() {
@@ -375,6 +448,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(graveyard)
 
         menu.addItem(.separator())
+        menu.addItem(backgroundMenu())
         menu.addItem(action(userPaused ? "Resume" : "Pause") { [unowned self] in
             userPaused.toggle()
             lastTick = CACurrentMediaTime()

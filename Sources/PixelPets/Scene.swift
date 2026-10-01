@@ -22,6 +22,12 @@ struct SceneFrame {
 
 /// Turns the World into the item list the shader draws, once per frame.
 enum SceneBuilder {
+    /// The screen grid is 960 wide; the simulation is 320 wide. Sprites are drawn at grid scale.
+    static let gridWidth: Float = 960
+    static let worldScale: Float = gridWidth / Float(World.width)
+
+    static func gx(_ x: Double) -> Float { Float(x) * worldScale }
+
     static func build(world: World, groundY: Float, time: Double, playMode: Bool,
                       atlas: SpriteAtlas, regions: PetSpriteRegions) -> SceneFrame {
         var entries: [(item: SceneItem, hit: HitBox?, priority: Int)] = []
@@ -29,55 +35,57 @@ enum SceneBuilder {
 
         for grave in world.graves {
             var item = SceneItem()
-            item.position = SIMD2(Float(grave.x), groundY)
+            item.position = SIMD2(gx(grave.x), groundY)
             item.tile = atlas.tile(.grave)
-            item.primary = PetPalette.rgba(0x9A9AA6)
-            item.secondary = PetPalette.rgba(0x6E6E7A)
             entries.append((item, nil, 3))
         }
 
         for egg in world.eggs {
             var item = SceneItem()
-            item.position = SIMD2(Float(egg.x), groundY)
-            let wobbleSpeed = 0.3 + egg.progress * 2
-            let wobbling = (time * wobbleSpeed).truncatingRemainder(dividingBy: 1) < 0.25
-            item.tile = atlas.tile(.egg(egg.remaining < 60 ? 2 : wobbling ? 1 : 0))
+            let x = gx(egg.x)
+            item.position = SIMD2(x, groundY)
+            let wobble = Int(time * (2 + egg.progress * 6)) % 4
+            let still = (time * (0.3 + egg.progress)).truncatingRemainder(dividingBy: 1) > 0.35
+            item.tile = atlas.tile(.egg(egg.remaining < 60 ? 4 + Int(time * 8) % 2 : still ? 0 : wobble))
             item.primary = PetPalette.rgba(0xF7EEDC)
             item.secondary = PetPalette.rgba(egg.genes.looks.primary)
             item.bars = SIMD4(Float(egg.progress), 0, 0, 0)
             item.flags = SceneItem.Flags.eggBar.rawValue
+            item.barLift = 42
+            item.shadow = 14
             if egg.mutated && Int(time * 2) % 2 == 0 {
                 item.icon = Int32(atlas.tile(.icon(.sparkle)))
             }
-            let hit = HitBox(target: .egg(egg.id), minX: Float(egg.x) - 5, minY: groundY,
-                             maxX: Float(egg.x) + 5, maxY: groundY + 12)
+            let hit = HitBox(target: .egg(egg.id), minX: x - 14, minY: groundY, maxX: x + 14, maxY: groundY + 38)
             entries.append((item, hit, 3))
         }
 
         for loot in world.loot {
             var item = SceneItem()
-            item.position = SIMD2(Float(loot.x), groundY)
+            let x = gx(loot.x)
+            item.position = SIMD2(x, groundY)
             switch loot.kind {
             case .dailyChest:
                 item.tile = atlas.tile(.chest)
                 item.primary = PetPalette.rgba(0xA0673A)
-                item.secondary = PetPalette.rgba(0xF7D358)
+                item.secondary = PetPalette.rgba(0xF2C14E)
             case .bag:
                 item.tile = atlas.tile(.bag)
                 item.primary = PetPalette.rgba(0xC9A26B)
-                item.secondary = PetPalette.rgba(0xE84A5F)
+                item.secondary = PetPalette.rgba(0xD9534F)
             }
+            item.shadow = 18
+            item.barLift = 36
             if (time + Double(loot.x)).truncatingRemainder(dividingBy: 3) < 1 {
                 item.icon = Int32(atlas.tile(.icon(.sparkle)))
             }
-            let hit = HitBox(target: .loot(loot.id), minX: Float(loot.x) - 6, minY: groundY,
-                             maxX: Float(loot.x) + 6, maxY: groundY + 11)
+            let hit = HitBox(target: .loot(loot.id), minX: x - 20, minY: groundY, maxX: x + 20, maxY: groundY + 34)
             entries.append((item, hit, 2))
         }
 
         for pellet in world.pellets {
             var item = SceneItem()
-            item.position = SIMD2(Float(pellet.x), groundY)
+            item.position = SIMD2(gx(pellet.x), groundY)
             item.tile = atlas.tile(.pellet)
             item.primary = PetPalette.rgba(0xC77B3A)
             item.secondary = PetPalette.rgba(0xF2C288)
@@ -85,33 +93,34 @@ enum SceneBuilder {
         }
 
         for pet in world.pets {
-            let (petItem, weaponItem, hit) = petItems(pet, clock: clock, time: time, groundY: groundY,
-                                                      playMode: playMode, atlas: atlas,
-                                                      region: regions.region(for: pet.id))
+            let (petItem, weaponItem, hit) = petItems(pet, clock: clock, time: time, groundY: groundY, playMode: playMode,
+                                                      atlas: atlas, region: regions.region(for: pet.id))
             entries.append((petItem, hit, 4))
             if let weaponItem { entries.append((weaponItem, nil, 4)) }
         }
 
         if let m = world.monster {
             var item = SceneItem()
-            let frame = Int(time * (m.kind == .bat ? 6 : 3)) % 2
+            let x = gx(m.x)
+            // The attack animation plays right after each hit.
+            let sinceHit = m.kind.hitInterval - m.hitCooldown
+            let attacking = m.phase == .attacking && sinceHit >= 0 && sinceHit < Double(m.kind.attackFrames) / 10
+            let frame = attacking ? min(m.kind.attackFrames - 1, Int(sinceHit * 10)) : Int(time * m.kind.moveFPS) % m.kind.moveFrames
             var y = groundY
-            if m.kind == .bat { y += 5 + 10 * Float(0.5 + 0.5 * sin(m.age * 2)) }
-            item.position = SIMD2(Float(m.x), y)
+            if m.kind == .bat { y += 16 + 20 * Float(0.5 + 0.5 * sin(m.age * 2)) }
+            item.position = SIMD2(x, y)
+            item.tile = atlas.tile(.monster(m.kind, attack: attacking, frame))
+            item.tileSpan = m.kind == .ogre ? 2 : 1
             switch m.kind {
             case .slime:
-                item.tile = atlas.tile(.slime(frame))
                 item.primary = PetPalette.rgba(0x6CCB5F)
                 item.secondary = PetPalette.rgba(0xB8F0A8)
             case .bat:
-                item.tile = atlas.tile(.bat(frame))
                 item.primary = PetPalette.rgba(0x5A4A78)
-                item.secondary = PetPalette.rgba(0xB08BD8)
+                item.secondary = PetPalette.rgba(0xC9A8E8)
             case .ogre:
-                item.tile = atlas.tile(.ogre(frame))
-                item.tileSpan = 2
                 item.primary = PetPalette.rgba(0x8C9A5B)
-                item.secondary = PetPalette.rgba(0xC9B28A)
+                item.secondary = PetPalette.rgba(0xA0673A)
             }
             var flags: SceneItem.Flags = []
             if m.facingLeft { flags.insert(.flipX) }
@@ -119,20 +128,21 @@ enum SceneBuilder {
             if m.phase == .attacking {
                 flags.insert(.monsterBar)
                 item.bars = SIMD4(Float(max(0, m.health / m.kind.maxHealth)), 0, 0, 0)
+                item.barLift = m.kind == .ogre ? 104 : m.kind == .bat ? 52 : 40
             }
             item.flags = flags.rawValue
-            let height: Float = m.kind == .ogre ? 24 : 12
-            let hit = HitBox(target: .monster, minX: Float(m.x - m.kind.halfWidth), minY: y,
-                             maxX: Float(m.x + m.kind.halfWidth), maxY: y + height)
+            item.shadow = m.kind == .ogre ? 32 : 18
+            let half = Float(m.kind.halfWidth) * worldScale
+            let height: Float = m.kind == .ogre ? 100 : 44
+            let hit = HitBox(target: .monster, minX: x - half, minY: y, maxX: x + half, maxY: y + height)
             entries.append((item, hit, 5))
         }
 
         if let puff = world.smoke {
             var item = SceneItem()
-            item.position = SIMD2(Float(puff.x), groundY)
-            item.tile = atlas.tile(.smoke(min(2, Int(puff.age / (SmokePuff.duration / 3)))))
-            item.primary = PetPalette.rgba(0xE6E6E6)
-            item.secondary = PetPalette.rgba(0xBDBDBD)
+            item.position = SIMD2(gx(puff.x), groundY)
+            let frame = min(PropArt.smokeFrames - 1, Int(puff.age / SmokePuff.duration * Double(PropArt.smokeFrames)))
+            item.tile = atlas.tile(.smoke(frame))
             entries.append((item, nil, 5))
         }
 
@@ -160,21 +170,27 @@ enum SceneBuilder {
                                  atlas: SpriteAtlas, region: Int) -> (SceneItem, SceneItem?, HitBox) {
         let baby = pet.stage == .baby
         let anim = animation(for: pet, clock: clock)
-        let frame = Int(time * frameRate(anim)) % anim.frameCount
+        let frame: Int
+        if anim == .attack {
+            frame = min(anim.frameCount - 1, Int((clock - pet.lastAttackAt) * anim.fps))
+        } else {
+            frame = Int(time * anim.fps) % anim.frameCount
+        }
 
-        var x = Float(pet.x)
-        var y = groundY + Float(pet.height)
-        if anim == .hop && frame == 0 { y += 3 }
-        if pet.feeling == .scared && !pet.isAsleep { x += Int(time * 12) % 2 == 0 ? -1 : 1 }
+        var x = gx(pet.x)
+        let y = groundY + Float(pet.height) * worldScale
+        if pet.feeling == .scared && !pet.isAsleep { x += Int(time * 14) % 2 == 0 ? -2 : 2 }
 
         var item = SceneItem()
         item.position = SIMD2(x, y)
-        item.tile = atlas.petTile(region: region, anim: anim, frame: frame, baby: baby)
+        item.tile = atlas.petTile(region: region, view: pet.facing, anim: anim, frame: frame, baby: baby)
         item.primary = PetPalette.rgba(pet.looks.primary)
         item.secondary = PetPalette.rgba(pet.looks.secondary)
+        item.shadow = baby ? 12 : 18
+        item.barLift = baby ? 42 : 58
 
         var flags: SceneItem.Flags = []
-        if pet.facingLeft { flags.insert(.flipX) }
+        if pet.facingLeft && pet.facing == .side { flags.insert(.flipX) }
         if pet.hurtFlash > 0 { flags.insert(.hurtFlash) }
         if pet.health < 25 { flags.insert(.blinkHealth) }
         item.flags = flags.rawValue
@@ -187,20 +203,18 @@ enum SceneBuilder {
         }
 
         var weaponItem: SceneItem?
-        if let weapon = pet.weapon, !pet.isAsleep {
+        if let weapon = pet.weapon, !pet.isAsleep, pet.facing != .back {
             var w = SceneItem()
-            let reach: Float = anim == .attack && frame == 0 ? 8 : 6
-            w.position = SIMD2(x + (pet.facingLeft ? -reach : reach), y + (baby ? 1 : 3) - 0.01)
+            let forward: Float = pet.facing == .front ? 14 : (anim == .attack && frame >= 2 && frame <= 4 ? 22 : 16)
+            let left = pet.facing == .side && pet.facingLeft
+            w.position = SIMD2(x + (left ? -forward : forward), y + (baby ? 6 : 10) - 0.01)
             w.tile = atlas.tile(.weapon(weapon))
-            let colours = weaponColours(weapon)
-            w.primary = PetPalette.rgba(colours.0)
-            w.secondary = PetPalette.rgba(colours.1)
-            w.flags = pet.facingLeft ? SceneItem.Flags.flipX.rawValue : 0
+            w.flags = left ? SceneItem.Flags.flipX.rawValue : 0
             weaponItem = w
         }
 
-        let half: Float = baby ? 5 : 7
-        let hit = HitBox(target: .pet(pet.id), minX: x - half, minY: y, maxX: x + half, maxY: y + (baby ? 10 : 13))
+        let half: Float = baby ? 14 : 20
+        let hit = HitBox(target: .pet(pet.id), minX: x - half, minY: y, maxX: x + half, maxY: y + (baby ? 34 : 48))
         return (item, weaponItem, hit)
     }
 
@@ -209,22 +223,11 @@ enum SceneBuilder {
         if pet.hurtFlash > 0 { return .hurt }
         if pet.isAsleep { return .sleep }
         if pet.isEating { return .eat }
-        if pet.fight == .fighting && clock - pet.lastAttackAt < 0.4 { return .attack }
+        if pet.fight == .fighting && clock - pet.lastAttackAt < 0.5 { return .attack }
         if pet.feeling == .sick { return .sick }
         if pet.feeling == .excited { return .hop }
         if pet.isWalking { return .walk }
         return .idle
-    }
-
-    private static func frameRate(_ anim: PetAnim) -> Double {
-        switch anim {
-        case .idle: return 1.5
-        case .walk, .eat: return 4
-        case .hop: return 3
-        case .sick: return 2
-        case .attack: return 6
-        default: return 1
-        }
     }
 
     private static func icon(for pet: Pet, clock: Double) -> IconKind? {
@@ -235,15 +238,5 @@ enum SceneBuilder {
             return (clock + phase).truncatingRemainder(dividingBy: 30) < 2 ? .heart : nil
         }
         return IconKind.for(pet.feeling)
-    }
-
-    private static func weaponColours(_ item: Item) -> (UInt32, UInt32) {
-        switch item {
-        case .stick, .slingshot: return (0x8A5A2B, 0x5E3B1A)
-        case .woodenSword: return (0xC08A4E, 0x7A4E24)
-        case .ironSword: return (0xDDE3EA, 0xF7D358)
-        case .magicWand: return (0x9A5BC4, 0xF7D358)
-        default: return (0xF4F1E8, 0xE84A5F)
-        }
     }
 }

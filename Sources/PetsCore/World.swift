@@ -113,7 +113,21 @@ struct World: Codable {
         updateRain(dt: dt)
         separatePets()
         ensureNotEmpty()
-        for i in pets.indices { pets[i].feeling = Feelings.resolve(pets[i]) }
+        for i in pets.indices {
+            pets[i].feeling = Feelings.resolve(pets[i])
+            pets[i].facing = facing(for: pets[i])
+        }
+    }
+
+    /// Side view while moving, sleeping or fighting; otherwise front or back.
+    func facing(for pet: Pet) -> PetFacing {
+        if pet.held { return .front }
+        if pet.isAsleep { return .side }
+        if pet.isEating { return .front }
+        if monster != nil && pet.fight != .none { return .side }
+        if pet.isWalking || pet.isFalling { return .side }
+        if pet.feeling == .excited || pet.feeling == .hungry { return .front }
+        return pet.idleFacing
     }
 
     // MARK: Eggs, graves, population
@@ -292,6 +306,8 @@ struct World: Codable {
         if pets[i].wanderTimer <= 0 {
             pets[i].wanderTimer = random.double(in: 5...20)
             pets[i].targetX = wanderTarget(for: i)
+            let look = random.nextDouble()
+            pets[i].idleFacing = look < 0.5 ? .front : look < 0.65 ? .back : .side
         }
         moveToward(petIndex: i, x: pets[i].targetX, speed: pets[i].walkSpeed, dt: dt)
     }
