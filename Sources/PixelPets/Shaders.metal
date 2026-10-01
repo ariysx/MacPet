@@ -161,56 +161,93 @@ static DayBlend dayBlend(float phase) {
 
 // MARK: - Landscape pieces
 
-/// A cumulus cloud: a union of circles, lit from the top left in three tones.
-static bool cloud(float2 g, float2 base, float scale, float seed, float3 sky, thread float3& col) {
+// The landscape is painted like the references: hue-shifted ramps (cool shadows, warm lights),
+// clustered shapes with lit top-left edges, selective dithering at tone seams, and layers that
+// fade toward the sky with distance. Shapes are designed in 480-wide units and sampled at the
+// grid's full resolution.
+
+/// Picks one of five tones from `l` (about -1...1), dithering a narrow seam between each pair.
+static float3 ramp5(float l, float2 pixel, float3 t0, float3 t1, float3 t2, float3 t3, float3 t4) {
+    float d = checker(pixel) ? 0.06 : -0.06;
+    float x = l + d * step(0.0, 1.0);
+    if (x > 0.62) return t4;
+    if (x > 0.25) return t3;
+    if (x > -0.15) return t2;
+    if (x > -0.5) return t1;
+    return t0;
+}
+
+/// A cumulus cloud: bumpy circles lit from the top left, cool blue in shadow, flat underneath.
+static bool cumulus(float2 p, float2 pixel, float2 base, float scale, float seed, thread float3& col) {
+    float best = -9.0;
     bool hit = false;
-    float best = -2.0;
-    for (int i = 0; i < 9; i++) {
-        float fi = float(i) + seed * 13.0;
-        float2 c = base + float2((hash11(fi) - 0.5) * 70.0, hash11(fi + 3.1) * 22.0 + (i < 3 ? 0.0 : 8.0)) * scale;
-        float r = (8.0 + hash11(fi + 7.7) * 12.0) * scale * (i < 3 ? 0.8 : 1.0);
-        float2 d = (g - c) / r;
-        float len2 = dot(d, d);
-        if (len2 < 1.0 && g.y > base.y - 2.0 * scale) {
+    for (int i = 0; i < 12; i++) {
+        float fi = float(i) + seed * 17.0;
+        float row = i < 4 ? 0.0 : i < 9 ? 1.0 : 2.0;
+        float2 c = base + float2((hash11(fi) - 0.5) * (row == 0.0 ? 90.0 : row == 1.0 ? 66.0 : 38.0),
+                                 row * 13.0 + hash11(fi + 3.1) * 8.0) * scale;
+        float r = (9.0 + hash11(fi + 7.7) * 9.0 - row * 1.5) * scale;
+        float2 d = (p - c) / r;
+        float a = atan2(d.y, d.x);
+        float bump = 1.0 + 0.07 * sin(a * 7.0 + fi) + 0.04 * sin(a * 13.0 + fi * 2.0);
+        float len = length(d);
+        if (len < bump && p.y > base.y - 3.0 * scale) {
             hit = true;
-            float light = dot(d, float2(-0.55, 0.8)) + (1.0 - len2) * 0.3;
+            // Lit as one mass: mostly by height in the cloud, a little by each puff's shape.
+            float height = (p.y - base.y) / (34.0 * scale);
+            float light = height * 1.25 - 0.45 + dot(d, float2(-0.55, 0.75)) * 0.4 + (noise2(p * 0.12 + seed) - 0.5) * 0.35;
             best = max(best, light);
         }
     }
     if (!hit) return false;
-    float3 lit = float3(0.97, 0.97, 0.95);
-    float3 mid = mix(float3(0.84, 0.89, 0.94), sky, 0.15);
-    float3 shade = mix(float3(0.62, 0.74, 0.88), sky, 0.3);
-    col = best > 0.35 ? lit : best > 0.05 ? mid : shade;
-    // Dither one band edge so the tones blend like painted pixels.
-    if (best > 0.30 && best <= 0.40 && checker(g)) col = mid;
+    // Flatten and cool the underside.
+    if (p.y < base.y + 3.0 * scale) best = min(best, -0.35);
+    col = ramp5(best, pixel, float3(0.47, 0.63, 0.84), float3(0.62, 0.75, 0.90), float3(0.78, 0.87, 0.95),
+                float3(0.92, 0.95, 0.98), float3(1.0, 1.0, 0.97));
     return true;
 }
 
-/// Height of the distant ridge at design x.
+/// Height of the distant mountain range.
 static float ridgeHeight(float x, float groundTop, float skyH) {
-    float rx = x * 0.011;
-    return groundTop + skyH * 0.12 + skyH * 0.32 * (0.55 * abs(noise1(rx) * 2.0 - 1.0) + 0.45 * noise1(rx * 2.7 + 4.0));
+    float rx = x * 0.0085;
+    float peaks = 0.6 * (1.0 - abs(noise1(rx) * 2.0 - 1.0)) + 0.4 * noise1(rx * 2.3 + 4.0);
+    return groundTop + skyH * 0.08 + skyH * 0.42 * peaks * peaks + 4.0 * noise1(x * 0.09);
+}
+
+/// A tiered pine at (`x`, `base`): jagged layers, lit on the left.
+static bool pine(float2 p, float2 pixel, float x, float base, float h, float3 dark, float3 mid, float3 light, thread float3& col) {
+    float up = p.y - base;
+    if (up < -2.0 || up > h) return false;
+    if (up < 0.0) {
+        if (abs(p.x - x) < 1.2) { col = float3(0.30, 0.21, 0.17); return true; }
+        return false;
+    }
+    float tierH = h / 4.5;
+    float tier = fract(up / tierH);
+    float halfW = (h - up) * 0.38 * (0.7 + 0.45 * tier) + 1.0;
+    halfW += (noise1(p.y * 1.7 + x) - 0.5) * 1.6;
+    float dx = p.x - x;
+    if (abs(dx) > halfW) return false;
+    float l = -dx / halfW * 0.8 + (tier - 0.5) * 0.5;
+    col = l > 0.35 ? light : l > -0.25 ? mid : dark;
+    if (l > 0.2 && l <= 0.35 && checker(pixel)) col = mid;
+    return true;
 }
 
 static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float, access::sample> image) {
-    // Shapes are designed on a 480-wide grid; `k` scales them up so they keep their size on
-    // finer grids, while dithering and stars stay on real pixels.
     float k = u.grid.x / 480.0;
-    float2 g = floor(pixel / k);
+    float2 p = (pixel + 0.5) / k;          // design units, full-resolution sampling
+    float2 g = floor(pixel / k);           // design cell, for hashing
     DayBlend d = dayBlend(u.dayPhase);
     float3 tint = mix(kTint[d.a], kTint[d.b], d.t);
     float night = mix(kNight[d.a], kNight[d.b], d.t);
-    // Depth layers, back to front: sky, clouds, far ridge, treeline hill, near hill, the back
-    // meadow with the oak (from the horizon down to the walking line), the front meadow, and
-    // a foreground drawn after the sprites (see `foreground`).
     float walk = floor(u.grid.y * 0.22 / k);
     float groundTop = floor(u.grid.y * 0.34 / k); // the horizon
     float skyH = max(1.0, u.grid.y / k - groundTop);
     float width = u.grid.x / k;
     float3 top = mix(kSkyTop[d.a], kSkyTop[d.b], d.t);
     float3 bottom = mix(kSkyBottom[d.a], kSkyBottom[d.b], d.t);
-    float v = clamp((g.y - groundTop) / skyH, 0.0, 1.0);
+    float v = clamp((p.y - groundTop) / skyH, 0.0, 1.0);
     float3 col;
     bool clouded = false; // anything solid in front of the sky: no stars there
 
@@ -226,92 +263,110 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
         }
         constexpr sampler nearest(filter::nearest, address::clamp_to_edge);
         col = image.sample(nearest, float2(uv.x, 1.0 - uv.y)).rgb * tint;
+        clouded = true;
     } else {
-        // Sky: 7 bands with a dithered seam between each.
-        float b = v * 7.0;
+        // Sky: five bands from the hazy horizon up, with a dithered seam at each step.
+        // Sky: nine soft bands, lighter at the horizon, each seam dithered.
+        float b = sqrt(v) * 9.0;
         float band = floor(b);
         if (fract(b) > 0.8 && checker(pixel)) band += 1.0;
-        col = mix(bottom, top, min(band / 6.0, 1.0));
+        col = mix(bottom, top, min(band / 8.0, 1.0));
 
-        // Big clouds drifting slowly left, three tones each.
-        float span = width + 260.0;
+        // Cumulus clouds drifting slowly left.
+        float span = width + 300.0;
         for (int i = 0; i < 3; i++) {
             float fi = float(i);
-            float speed = 0.6 + hash11(fi * 3.1) * 0.6;
-            float x = span - pmod(u.time * speed + hash11(fi * 7.7) * span, span) - 130.0;
-            float y = groundTop + skyH * (0.45 + 0.28 * hash11(fi * 5.3));
-            float scale = 0.7 + hash11(fi * 2.3) * 0.6;
+            float speed = 0.4 + hash11(fi * 3.1) * 0.4;
+            float x = span - pmod(u.time * speed + (fi / 3.0 + hash11(fi * 7.7) * 0.2) * span, span) - 150.0;
+            float y = groundTop + skyH * (0.40 + 0.22 * hash11(fi * 5.3));
+            float scale = 1.0 + hash11(fi * 2.3) * 0.6;
             float3 c;
-            if (cloud(g, float2(floor(x), floor(y)), scale, fi, top, c)) {
+            if (cumulus(p, pixel, float2(x, y), scale, fi, c)) {
+                col = mix(c * mix(float3(1.0), tint, 0.85), top * 1.25, night * 0.55);
                 clouded = true;
-                col = mix(c, c * tint, 0.8);
-                if (night > 0.5) col = mix(col, top * 1.4, 0.6);
             }
         }
 
-        // A distant ridge: lit slopes face left, snow on the high peaks.
-        float ridge = floor(ridgeHeight(g.x, groundTop, skyH));
-        if (g.y < ridge) {
-            // Sample the slope up and to the side, so light and shade meet along diagonal ridges.
-            float sx = g.x + (ridge - g.y) * 0.55;
-            float slope = ridgeHeight(sx + 3.0, groundTop, skyH) - ridgeHeight(sx - 3.0, groundTop, skyH);
-            bool lit = slope > 0.0;
-            float3 rock = lit ? float3(0.62, 0.68, 0.82) : float3(0.47, 0.53, 0.70);
-            float snowLine = groundTop + skyH * 0.33 + (noise1(g.x * 0.2) - 0.5) * 6.0;
-            if (g.y > snowLine) rock = lit ? float3(0.95, 0.96, 0.99) : float3(0.75, 0.81, 0.92);
-            if (abs(slope) < 0.6 && checker(pixel)) rock = mix(rock, float3(0.55, 0.60, 0.76), 0.5);
-            col = mix(rock, bottom, 0.35) * tint;
+        // Distant mountains: planar faces, snow above a ragged line, forest on the lower slopes.
+        float ridge = ridgeHeight(p.x, groundTop, skyH);
+        if (p.y < ridge) {
+            float sx = p.x + (ridge - p.y) * 0.6;
+            float slope = ridgeHeight(sx + 2.5, groundTop, skyH) - ridgeHeight(sx - 2.5, groundTop, skyH);
+            float face = slope > 0.0 ? 1.0 : 0.0;
+            float strata = noise2(float2(p.x * 0.05, p.y * 0.35));
+            float3 rock = face > 0.5 ? (strata > 0.62 ? float3(0.72, 0.76, 0.88) : float3(0.62, 0.68, 0.84))
+                                     : (strata > 0.62 ? float3(0.52, 0.58, 0.78) : float3(0.44, 0.51, 0.72));
+            float snowLine = groundTop + skyH * 0.30 + (noise1(p.x * 0.15) - 0.5) * 10.0 + (noise1(p.x * 0.6) - 0.5) * 4.0;
+            if (p.y > snowLine) rock = face > 0.5 ? float3(0.96, 0.97, 1.0) : float3(0.72, 0.80, 0.94);
+            float forest = groundTop + skyH * 0.1 + noise1(p.x * 0.04) * skyH * 0.08 + (hash11(floor(p.x / 2.5)) - 0.5) * 2.5;
+            if (p.y < forest) rock = face > 0.5 ? float3(0.36, 0.55, 0.56) : float3(0.28, 0.45, 0.50);
+            col = mix(rock, bottom, 0.38) * tint;
             clouded = true;
         }
 
-        // Far hill with a pine treeline.
-        float farH = groundTop + 22.0 + floor(9.0 * sin(g.x * 0.017 + 1.3) + 5.0 * sin(g.x * 0.043 + 0.4));
-        float treeCell = floor(g.x / 7.0);
-        float treeX = treeCell * 7.0 + 3.5;
-        float treeH = hash11(treeCell * 1.7) > 0.35 ? 6.0 + hash11(treeCell * 3.3) * 10.0 : 0.0;
-        float treeBase = groundTop + 22.0 + floor(9.0 * sin(treeX * 0.017 + 1.3) + 5.0 * sin(treeX * 0.043 + 0.4));
-        float3 farGreen = mix(float3(0.44, 0.66, 0.50), bottom, 0.25);
-        if (g.y < treeBase + treeH && g.y >= treeBase - 2.0 && abs(g.x - treeX) < (treeBase + treeH - g.y) * 0.32) {
-            col = (g.x < treeX ? farGreen * 0.9 : farGreen * 0.72) * tint;
+        // Far hills, hazy teal, with a fringe of tiny treetops.
+        float farH = groundTop + 16.0 + 9.0 * sin(p.x * 0.014 + 1.3) + 5.0 * sin(p.x * 0.037 + 0.4);
+        float fringe = farH + 1.5 + 2.5 * abs(sin(p.x * 0.9)) * step(0.4, hash11(floor(p.x / 3.0) * 1.7));
+        if (p.y < fringe) {
+            float3 c = p.y > farH - 1.0 ? float3(0.47, 0.72, 0.68) : float3(0.38, 0.63, 0.62);
+            if (p.y > farH - 3.0 && p.y <= farH - 1.0 && checker(pixel)) c = float3(0.47, 0.72, 0.68);
+            col = mix(c, bottom, 0.25) * tint;
             clouded = true;
         }
-        if (g.y < farH) { col = farGreen * tint; clouded = true; }
 
-        // Near hill with round bushes.
-        float nearH = groundTop + 8.0 + floor(6.0 * sin(g.x * 0.023 + 2.1) + 3.0 * sin(g.x * 0.061 + 5.0));
-        float3 nearGreen = float3(0.40, 0.66, 0.42);
-        float bushCell = floor(g.x / 31.0);
-        float2 bush = float2(bushCell * 31.0 + 15.0 + (hash11(bushCell) - 0.5) * 14.0, 0.0);
-        bush.y = groundTop + 8.0 + floor(6.0 * sin(bush.x * 0.023 + 2.1) + 3.0 * sin(bush.x * 0.061 + 5.0));
-        float br = 5.0 + hash11(bushCell * 2.1) * 4.0;
-        float2 bd = (g - bush) / br;
-        if (hash11(bushCell * 4.7) > 0.4 && dot(bd, bd) < 1.0) {
-            col = (bd.x < -0.1 && bd.y > 0.1 ? nearGreen * 1.12 : bd.y < -0.3 ? nearGreen * 0.78 : nearGreen * 0.94) * tint;
+        // Mid hills with clumps of pines and round bushes.
+        float midH = groundTop + 7.0 + 6.0 * sin(p.x * 0.021 + 2.1) + 3.0 * sin(p.x * 0.055 + 5.0);
+        float pineCell = floor(p.x / 13.0);
+        for (int kx = -1; kx <= 1; kx++) {
+            float cell = pineCell + float(kx);
+            if (hash11(cell * 2.7) < 0.45) continue;
+            float tx = cell * 13.0 + 6.5 + (hash11(cell * 5.1) - 0.5) * 8.0;
+            float baseY = groundTop + 7.0 + 6.0 * sin(tx * 0.021 + 2.1) + 3.0 * sin(tx * 0.055 + 5.0) - 2.0;
+            float h = 14.0 + hash11(cell * 3.3) * 16.0;
+            float3 c;
+            if (pine(p, pixel, tx, baseY, h, float3(0.15, 0.36, 0.30), float3(0.22, 0.48, 0.36), float3(0.36, 0.62, 0.40), c)) {
+                col = mix(c, bottom, 0.12) * tint;
+                clouded = true;
+            }
+        }
+        if (p.y < midH) {
+            float l = noise2(float2(p.x * 0.05, p.y * 0.2));
+            float3 c = l > 0.62 ? float3(0.46, 0.72, 0.44) : l < 0.3 ? float3(0.30, 0.56, 0.38) : float3(0.37, 0.64, 0.41);
+            col = mix(c, bottom, 0.1) * tint;
             clouded = true;
         }
-        if (g.y < nearH) { col = nearGreen * tint; clouded = true; }
 
-        // A big shaded oak on the right.
-        float2 treeAt = float2(floor(width * 0.82), groundTop - 7.0);
-        float2 tp = g - treeAt;
-        if (abs(tp.x + tp.y * 0.05) < 4.0 + max(0.0, 6.0 - tp.y) * 0.6 && tp.y >= 0.0 && tp.y < 46.0) {
-            col = (tp.x < 0.0 ? float3(0.47, 0.33, 0.25) : float3(0.36, 0.25, 0.20)) * tint;
+        // The big oak in the back meadow: clustered foliage on a gnarled trunk.
+        float2 treeAt = float2(floor(width * 0.8), groundTop - 6.0);
+        float2 tp = p - treeAt;
+        float trunkHalf = 4.0 + max(0.0, 7.0 - tp.y) * 0.7 + max(0.0, tp.y - 40.0) * 0.15;
+        float trunkX = tp.x + sin(tp.y * 0.08) * 1.5;
+        if (tp.y >= 0.0 && tp.y < 58.0 && abs(trunkX) < trunkHalf) {
+            float bark = noise2(float2(trunkX * 0.9, tp.y * 0.25));
+            float3 c = trunkX < -trunkHalf * 0.3 ? float3(0.55, 0.39, 0.28) : trunkX < trunkHalf * 0.4 ? float3(0.42, 0.29, 0.22)
+                                                                                                   : float3(0.29, 0.20, 0.17);
+            if (bark > 0.7) c *= 0.82;
+            col = c * tint;
             clouded = true;
         }
-        float leaf = -2.0;
-        for (int i = 0; i < 11; i++) {
+        float best = -9.0, bestZ = -1e9;
+        for (int i = 0; i < 16; i++) {
             float fi = float(i);
-            float2 c = float2((hash11(fi * 1.9) - 0.5) * 70.0, 40.0 + hash11(fi * 2.7) * 38.0);
-            float r = 13.0 + hash11(fi * 3.9) * 10.0;
+            float2 c = float2((hash11(fi * 1.9) - 0.5) * 84.0, 44.0 + hash11(fi * 2.7) * 44.0);
+            float r = 12.0 + hash11(fi * 3.9) * 10.0;
             float2 dd = (tp - c) / r;
-            float len2 = dot(dd, dd);
-            if (len2 < 1.0) leaf = max(leaf, dot(dd, float2(-0.5, 0.75)) + (noise2(g * 0.35) - 0.5) * 0.5);
+            float edge = 1.0 + (noise2(p * 0.55 + fi) - 0.5) * 0.28;
+            float z = -c.y + hash11(fi) * 10.0; // lower clusters sit in front
+            if (dot(dd, dd) < edge * edge && z > bestZ - 1e-3) {
+                bestZ = z;
+                best = dot(dd, float2(-0.55, 0.72)) * 0.85 + (1.0 - length(dd)) * 0.3;
+            }
         }
-        if (leaf > -2.0) {
-            float3 lit = float3(0.62, 0.80, 0.36), mid = float3(0.27, 0.62, 0.38), dark = float3(0.16, 0.42, 0.30);
-            float3 c = leaf > 0.45 ? lit : leaf > -0.1 ? mid : dark;
-            if (leaf > 0.38 && leaf <= 0.5 && checker(pixel)) c = mid;
-            if (leaf > -0.18 && leaf <= -0.05 && checker(pixel)) c = dark;
+        if (best > -9.0) {
+            float dapple = noise2(p * 0.45);
+            float l = best + (dapple - 0.5) * 0.45;
+            float3 c = ramp5(l, pixel, float3(0.10, 0.30, 0.24), float3(0.16, 0.42, 0.29), float3(0.25, 0.56, 0.32),
+                             float3(0.42, 0.70, 0.33), float3(0.64, 0.82, 0.35));
             col = c * tint;
             clouded = true;
         }
@@ -320,75 +375,71 @@ static float3 landscape(float2 pixel, constant SceneUniforms& u, texture2d<float
     // Night: twinkling stars, a crescent moon, and an aurora on some nights.
     if (night > 0.01 && v > 0.15) {
         float h = hash21(pixel);
-        bool visible = (u.background.x & kBackgroundImage) == 0u || dot(col, float3(0.33)) < 0.25;
-        if (h > 0.986 && visible && !clouded) {
+        if (h > 0.9965 && !clouded) {
             float twinkle = 0.55 + 0.45 * sin(u.time * (0.4 + hash21(pixel + 7.0)) + h * 60.0);
             col = mix(col, float3(1.0, 0.97, 0.86), night * twinkle);
         }
-        if ((u.background.x & kAurora) != 0u) {
-            float centre = groundTop + skyH * (0.62 + 0.12 * sin(g.x * 0.011 + u.time * 0.03) + 0.05 * sin(g.x * 0.037));
-            float above = g.y - centre;
+        if ((u.background.x & kAurora) != 0u && !clouded) {
+            float centre = groundTop + skyH * (0.62 + 0.12 * sin(p.x * 0.011 + u.time * 0.03) + 0.05 * sin(p.x * 0.037));
+            float above = p.y - centre;
             if (above > -4.0 && above < 34.0) {
-                float curtain = 0.6 + 0.4 * hash11(floor(g.x / 2.0)) * (0.7 + 0.3 * sin(u.time * 0.5 + g.x * 0.05));
+                float curtain = 0.6 + 0.4 * hash11(floor(p.x / 2.0)) * (0.7 + 0.3 * sin(u.time * 0.5 + p.x * 0.05));
                 float fade = above < 0.0 ? 1.0 : 1.0 - above / 34.0;
-                float k = floor(curtain * fade * 4.0) / 4.0;
-                col = mix(col, float3(0.25, 0.95, 0.80), k * 0.55 * night);
+                float kk = floor(curtain * fade * 4.0) / 4.0;
+                col = mix(col, float3(0.25, 0.95, 0.80), kk * 0.55 * night);
             }
         }
     }
     float mp = pmod(u.dayPhase - 20.0 / 24.0, 1.0) / (10.0 / 24.0);
     if (mp < 1.0) {
-        float2 centre = float2(floor(mix(0.12, 0.88, mp) * width), floor(groundTop + skyH * (0.5 + 0.38 * sin(mp * M_PI_F))));
-        float2 dm = g - centre;
+        float2 centre = float2(mix(0.12, 0.88, mp) * width, groundTop + skyH * (0.5 + 0.38 * sin(mp * M_PI_F)));
+        float2 dm = p - centre;
         float2 ds = dm - float2(3.0, 1.5);
         if (dot(dm, dm) <= 42.0 && dot(ds, ds) > 30.0) col = float3(0.98, 0.95, 0.80);
     }
 
-    // The meadow: hazy toward the horizon, richer below the walking line.
-    float3 grass = float3(0.45, 0.72, 0.36);
-    if (g.y < groundTop) {
-        float fromHorizon = groundTop - 1.0 - g.y;
+    // The meadow: hazy toward the horizon, richer toward the viewer, with jagged light patches.
+    if (p.y < groundTop) {
+        float fromHorizon = groundTop - p.y;
         float nearness = clamp(fromHorizon / groundTop, 0.0, 1.0);
-        // Grass strokes get longer and thicker toward the viewer.
-        float rowH = 1.0 + floor(nearness * 3.0);
-        float patch = noise2(float2(g.x * (0.03 - nearness * 0.015) + floor(g.y / rowH) * 7.3, g.y * 0.22));
-        float3 c = patch > 0.7 ? float3(0.58, 0.78, 0.38) : patch < 0.22 ? float3(0.39, 0.64, 0.35) : grass;
-        if (patch > 0.66 && patch <= 0.7 && checker(pixel)) c = float3(0.58, 0.78, 0.38);
-        if (hash21(pixel) > 0.94) c *= 0.9;
-        if (g.y < walk) c = mix(c, float3(0.30, 0.55, 0.30), 0.25 + 0.35 * smoothstep(walk, 0.0, g.y));
-        c = mix(c, bottom, (1.0 - nearness) * 0.25);
-        if (fromHorizon < 1.0) c = mix(float3(0.56, 0.80, 0.40), bottom, 0.2);
+        float3 base = float3(0.44, 0.71, 0.34);
+        float3 dark = float3(0.31, 0.57, 0.30);
+        float3 light = float3(0.60, 0.80, 0.35);
+        float3 bright = float3(0.74, 0.86, 0.40);
+        float sx = p.x * (0.035 - nearness * 0.02);
+        float n = noise2(float2(sx, p.y * (0.12 - nearness * 0.06)));
+        // Grass-blade edges: the patch threshold jitters per column.
+        float blades = (hash11(floor(pixel.x / max(1.0, k * 0.5)) * 1.3) - 0.5) * 0.06;
+        float3 c = n + blades > 0.66 ? light : n + blades < 0.28 ? dark : base;
+        if (n + blades > 0.8) c = bright;
+        if (n + blades > 0.62 && n + blades <= 0.66 && checker(pixel)) c = light;
+        // Darker strokes toward the viewer.
+        if (nearness > 0.5 && noise2(float2(p.x * 0.3, p.y * 1.4)) > 0.82) c = dark;
+        if (p.y < walk) c = mix(c, float3(0.26, 0.50, 0.28), 0.2 + 0.35 * smoothstep(walk, 0.0, p.y));
+        c = mix(c, bottom, (1.0 - nearness) * 0.3);
+        if (fromHorizon < 1.0) c = mix(float3(0.58, 0.80, 0.42), bottom, 0.2);
         col = c * tint;
-    }
-    float tuft = hash11(g.x * 1.7 + 3.0);
-    if ((g.y == groundTop && tuft > 0.7) || (g.y == groundTop + 1.0 && tuft > 0.9)) col = mix(float3(0.56, 0.80, 0.40), bottom, 0.2) * tint;
 
-    // Flowers swaying on a 2-frame cycle.
-    float cellW = 17.0;
-    for (int k = -1; k <= 1; k++) {
-        float c = floor(g.x / cellW) + float(k);
-        if (hash11(c * 3.7 + 1.0) < 0.4) continue;
-        float fx = c * cellW + floor(hash11(c * 9.1) * (cellW - 4.0)) + 2.0;
-        float fy = groundTop - 4.0 - floor(hash11(c * 4.3) * max(1.0, groundTop - 14.0));
-        if (abs(fy - walk) < 4.0) continue; // keep the walking line clear
-        float sway = pmod(floor(u.time) + c, 2.0);
-        float2 p = g - float2(fx, fy);
-        if (p.x == 0.0 && (p.y == 0.0 || p.y == 1.0)) col = float3(0.27, 0.52, 0.25) * tint;
-        float2 hp = p - float2(sway, 2.0);
-        float petalKind = hash11(c * 2.9);
-        float3 petal = petalKind < 0.33 ? float3(0.98, 0.95, 0.88) : petalKind < 0.66 ? float3(0.98, 0.82, 0.30) : float3(0.95, 0.55, 0.65);
-        if (abs(hp.x) + abs(hp.y) == 1.0) col = petal * tint;
-        if (hp.x == 0.0 && hp.y == 0.0) col = float3(0.97, 0.75, 0.25) * tint;
+        // Tiny flowers, denser toward the front.
+        float2 cell = floor(p / float2(5.0, 3.0));
+        float fh = hash21(cell + 31.0);
+        if (fh > 0.975 - nearness * 0.03 && abs(p.y - walk) > 3.0) {
+            float2 f = cell * float2(5.0, 3.0) + float2(2.5, 1.5);
+            if (length(p - f) < 0.6 + nearness * 0.5) {
+                float kind = hash21(cell + 7.0);
+                col = (kind < 0.4 ? float3(1.0, 0.98, 0.92) : kind < 0.75 ? float3(0.99, 0.84, 0.32) : float3(0.98, 0.60, 0.70)) * tint;
+            }
+        }
     }
 
     // Rain: 1-pixel diagonal streaks.
     if (u.rain > 0.01) {
         col *= mix(1.0, 0.82, u.rain);
-        float lane = g.x - g.y;
+        float lane = pixel.x - pixel.y;
         float hl = hash11(lane * 0.731);
-        if (hl < 0.35 * u.rain) {
-            float s = g.y + u.time * 120.0 + hl * 997.0;
-            if (pmod(s, 37.0 + floor(hl * 40.0)) < 4.0) col = mix(col, float3(0.78, 0.84, 0.95), 0.6);
+        if (hl < 0.25 * u.rain) {
+            float s2 = pixel.y + u.time * 240.0 + hl * 997.0;
+            if (pmod(s2, 74.0 + floor(hl * 80.0)) < 8.0) col = mix(col, float3(0.78, 0.84, 0.95), 0.6);
         }
     }
     return col;

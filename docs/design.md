@@ -52,6 +52,10 @@ Status: built. The original spec (approved 2026-09-30) is below, with the change
 - **Hit feedback:** every blow is recorded (`World.hits`). The app shows an impact burst where it lands and, in play mode, a floating damage number. A monster's hit knocks the pet back into a hop (it then charges back in); pets' hits nudge the monster.
 - The daily chest falls in from the sky with a bounce and sparkles, so it doesn't look like something a pet left behind. The loot sack shows gold coins.
 
+### Landscape, second pass
+
+Repainted after the reference backgrounds: hue-shifted ramps (cool shadows, warm lights), a nine-band sky with dithered seams, cumulus clouds lit as a mass with cool blue undersides, a distant range with planar faces, ragged snow and forested lower slopes, hazy teal far hills with a treetop fringe, tiered pines on the mid hills, an oak built from leaf clusters with dappled yellow-green highlights and a bark-textured trunk, and a meadow with jagged-edged light patches, darker strokes and sparse flowers. The landscape is sampled at the grid's full resolution so it matches the sprites' detail.
+
 ### Other changes
 
 - **Scene item limit is 24, not 12**, to fit weapons, loot and the chest.
